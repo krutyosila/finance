@@ -54,7 +54,29 @@ HTTPS uygulamasını bir PWA olarak yükleyebilirsiniz. Destekleyen tarayıcıda
 
 **Ayarlar → OpenAI bağlantısı** bölümünde anahtarınızı ekleyin, modeli seçin ve **Bağlantıyı test et** düğmesiyle erişimi doğrulayın. Model menüsünde **GPT-5.4 Mini** (varsayılan `gpt-5.4-mini`), **GPT-5.4 Nano** ve **GPT-5.4** seçenekleri bulunur. **Diğer model** ile özel bir model adı girebilirsiniz; kayıtlı özel adlar korunur. Bu menü tüm erişilebilir modellerin listesi değildir. Seçtiğiniz model hesabınızda erişilebilir olmalı, Responses API ve Structured Outputs desteklemelidir. Seçim yalnız **Ayarları kaydet** ile uygulanır. Test anahtar/model erişimini kontrol eder; yorumlama veya kota garantisi vermez. Anahtar giriş kutusu tekrar doldurulmaz ve API anahtarı tarayıcıya geri verilmez. Boş bırakarak yalnız modeli değiştirebilirsiniz. **Ayarlar → Giriş şifresi** bölümünde mevcut parolanızı doğrulayarak en az 8 karakterli yeni parola belirleyebilirsiniz; bütün oturumlar kapanır.
 
-**Ne oldu?** alanına Türkçe finans metni yazın veya CLI kullanın:
+**Ne oldu?** alanına Türkçe finans metni veya çok satırlı liste yazın. AI; gelir/gider/transfer gibi işlemleri, hesapları, borç tanımlarını, abonelikleri, düzenli ödemeleri ve yeni finans dönemlerini birlikte hazırlayabilir. Örneğin:
+
+```text
+Garanti banka hesabımda başlangıç bakiyesi 25000 TL var.
+Netflix aboneliğim aylık 300 TL, her ayın 15'inde yenileniyor ve Garanti'den ödeniyor.
+Kiram aylık 15000 TL, sonraki ödeme 5 Ekim 2026.
+Ali'ye başlangıçta 2000 TL kişisel borcum var.
+```
+
+Önce **Önizle**, sonra bütün kayıtları ve bağlantılarını gözden geçirip **Tüm kayıtları onayla ve kaydet** düğmesini kullanın. Bir not en fazla 12.000 karakter ve 25 kayıt içerebilir. Eksik başlangıç bakiyesi, tutar, para birimi veya yenileme/vade tarihi uydurulmaz; **Eksik ayrıntıları yazın** alanında tamamlayın. Aynı alanda düzeltme de yapabilirsiniz; **Önizlemeyi güncelle** ilk notunuzu ve önceki ek bilgileri korur. Yeni hesap, aynı plandaki abonelik veya işlemde kullanılabilir. Kredi kartı/KMH hesabının bağlı borcunu muhasebe servisi kendisi oluşturur.
+
+Abonelik veya düzenli ödeme tanımı, gerçek harcama değildir. “Netflix aylık 300 TL” bir plan; “Netflix'e 300 TL ödedim” bir giderdir. Bağlı gerçek ödemede farklı ayrıntı belirtmediyseniz planın hesap, kategori ve kapsamı kullanılır; bu bilgiler önizlemede görünür. Aynı ödeme dönemi tekrar ödenmiş olarak kaydedilemez. Onaylanan toplu plan tek seferde kaydedilir; bir kayıtta hata varsa hiçbir kayıt eklenmez. Para hareketleri tarih sırasına göre doğrulanır. Önizleme kayıt veya denetim izi oluşturmaz. Aynı ad/tür/para birimindeki mevcut tanımların tekrar oluşturulması engellenir. AI üzerinden mevcut kayıt silme/düzenleme, banka bağlantısı veya dosya içe aktarma desteklenmez.
+
+CLI ile bütün kayıt türleri için önce önizleme alın, sonra plan nesnesini onaylayın:
+
+```sh
+npm run finance -- ai preview "Garanti banka hesabımın başlangıç bakiyesi 25000 TL" --json
+npm run finance -- ai confirm --data PLAN_JSON --request-id BENZERSIZ_KIMLIK --json
+```
+
+`PLAN_JSON`, önizlemenin döndürdüğü tam JSON planıdır. Eksik veya geçersiz onay hiçbir şey kaydetmez ve CLI 2 koduyla biter. Onayda aynı kimlik ve aynı plan tekrar gönderilirse önceki başarılı sonuç döner; aynı kimlikle farklı plan 409 hatası verir.
+
+Eski tek işlem CLI komutları da kullanılabilir:
 
 ```sh
 npm run finance -- add "450 market"
@@ -62,11 +84,11 @@ npm run finance -- add "128000 ödeme geldi"
 npm run finance -- parse "24 USD domain yenilendi" --json
 ```
 
-Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Metni OpenAI yorumlar; tek açık işlem sunucudaki muhasebe kontrollerinden geçip doğrudan kaydedilir. Belirsiz veya birden fazla ayrı işlem web arayüzünde onay formuna gider. CLI ise `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları siz seçerek yapılandırılmış işlem gönderin. Borç kaydı eşleşen mevcut bir borç gerektirir; birden fazla eşleşme varsa onay gerekir. Anahtar yoksa, bağlantı/biçim/kota hatasında kayıt yapılmaz; eski ayrıştırıcıya dönülmez.
+Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Eski `add` komutunda metni OpenAI yorumlar; tek açık işlem sunucudaki muhasebe kontrollerinden geçip doğrudan kaydedilir. Belirsiz veya birden fazla ayrı işlemde CLI `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları seçerek yapılandırılmış işlem gönderin veya yeni `ai preview` akışını kullanın. Borç hareketi eşleşen mevcut veya aynı toplu planda tanımlanan borç gerektirir. Anahtar yoksa, bağlantı/biçim/kota hatasında kayıt yapılmaz; eski ayrıştırıcıya dönülmez.
 
-OpenAI'a yazdığınız not, mevcut hesap/borç adları ve kimlikleri, türleri ve para birimleri ile güncel yerel tarih gönderilir. Bütün işlem defteri, bakiyeler, e-posta ve giriş parolanız gönderilmez. İstek `store: false` kullanır; bu seçenek bütün sağlayıcı veri saklama politikalarının kapatılması anlamına gelmez. Uygulama [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) ile izinli işlem alanlarını alır. Model komut çalıştıramaz ve finans kurallarını değiştiremez.
+OpenAI'a yazdığınız not, mevcut hesap/borç adları ve kimlikleri, türleri ve para birimleri ile güncel yerel tarih gönderilir. Yeni toplu akış ayrıca abonelik/düzenli ödeme adları ve kimlikleri ile para birimlerini ve varsa açık finans döneminin adını/kimliğini gönderir. Bütün işlem defteri, mevcut bakiyeler/abonelik ücretleri, e-posta ve giriş parolanız gönderilmez. İstek `store: false` kullanır; bu seçenek bütün sağlayıcı veri saklama politikalarının kapatılması anlamına gelmez. Uygulama [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) ile izinli işlem alanlarını alır. Model komut çalıştıramaz ve finans kurallarını değiştiremez.
 
-Tarayıcı aynı notun başarısız ağ isteğini yeniden gönderirken istek kimliğini korur. Sunucu başarılı kayıt sonucunu finans SQLite dosyasında atomik saklar; aynı kimlik ve not yeni işlem oluşturmaz. CLI ile kontrollü tekrar için `add "450 market" --request-id BENZERSIZ_KIMLIK` kullanın. Ayrı yeni kimlik yeni işlem anlamına gelir.
+Tarayıcı aynı planın başarısız onay isteğini yeniden gönderirken istek kimliğini korur. Sunucu başarılı kayıt sonucunu finans SQLite dosyasında atomik saklar; aynı kimlik ve not yeni işlem oluşturmaz. CLI ile kontrollü tekrar için `add "450 market" --request-id BENZERSIZ_KIMLIK` kullanın. Ayrı yeni kimlik yeni işlem anlamına gelir.
 
 Anahtar özel 600 izinli `ai-config.json` dosyasında tutulur; varsayılan yer finans veritabanının klasörüdür. `FINANCE_AI_CONFIG` ile ayrı güvenli JSON yolu belirlenebilir. Sunucu modunda kaynak/release ağacının dışında olmalıdır; yerelde proje içindeki `data/` kullanılabilir. `OPENAI_API_KEY` ortam anahtarı dosyada anahtar yoksa kullanılabilir; panelde kaydedilen anahtar önceliklidir. Finans export'u ve finans/auth SQLite yedekleri bu anahtarı içermez. Yapılandırmayı ayrıca özel yedekleyin veya kurtarma sonrasında anahtarı panelden tekrar girin. Dosya düz metindir; disk şifrelemesi sağlamaz.
 

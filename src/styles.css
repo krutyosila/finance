@@ -3195,3 +3195,113 @@ table {
     gap: 3px;
   }
 }
+
+/* Multiline AI entry and review follow the existing record form palette. */
+.quick-input-row textarea {
+  flex: 1;
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  min-height: 104px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  line-height: 1.6;
+}
+.quick-input-row {
+  align-items: flex-end;
+}
+.ai-plan-review {
+  padding: 0 28px 24px;
+}
+.ai-preview-note {
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+.ai-plan-items {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+  margin: 20px 0;
+}
+.ai-plan-item {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 20px;
+}
+.ai-plan-item-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.ai-plan-item-heading h3 {
+  margin: 0;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+.ai-plan-item dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+}
+.ai-plan-item dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.ai-plan-item dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+.ai-follow-up {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+}
+.ai-follow-up-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+.ai-follow-up-footer small {
+  color: var(--muted);
+}
+.ai-plan-review .form-footer {
+  flex-wrap: wrap;
+}
+@media (max-width: 640px) {
+  .quick-input-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .quick-input-row .button {
+    width: 100%;
+  }
+  .quick-input-row .button > span {
+    display: inline;
+  }
+  .ai-plan-review {
+    padding: 0 18px 20px;
+  }
+  .ai-plan-item {
+    padding: 16px;
+  }
+  .ai-plan-item dl {
+    grid-template-columns: 1fr;
+  }
+  .ai-follow-up-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

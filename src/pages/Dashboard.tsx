@@ -11,7 +11,7 @@ import {
   Sparkles,
   Wallet,
 } from 'lucide-react';
-import type { FinancialContext, ParseResult, Transaction } from '../../shared/types';
+import type { FinancialContext, AiPlan, Transaction } from '../../shared/types';
 import { date, money, typeNames } from '../format';
 import { CategoryChart, TrendChart } from '../components/LazyCharts';
 import { QuickEntry } from '../components/QuickEntry';
@@ -21,8 +21,6 @@ import { useAuth } from '../auth';
 export function Dashboard({
   context,
   onReview,
-  onEntrySaved,
-  getEntryRequestId,
   onSettings,
   navigate,
   onCreate,
@@ -31,9 +29,7 @@ export function Dashboard({
   onTransaction,
 }: {
   context: FinancialContext;
-  onReview: (result: ParseResult) => void;
-  onEntrySaved: () => void;
-  getEntryRequestId: (text: string) => string;
+  onReview: (result: AiPlan) => void;
   onSettings: () => void;
   navigate: (page: string) => void;
   onCreate: (kind: 'accounts' | 'debts' | 'recurring' | 'subscriptions') => void;
@@ -124,12 +120,7 @@ export function Dashboard({
           {date(new Date().toISOString())}
         </div>
       </div>
-      <QuickEntry
-        onReview={onReview}
-        onSaved={onEntrySaved}
-        getRequestId={getEntryRequestId}
-        onSettings={onSettings}
-      />
+      <QuickEntry onReview={onReview} onSettings={onSettings} />
       <div className="overview-head">
         <h2>Finansal görünümünüz</h2>
         <span>{context.currentCycle ? context.currentCycle.name : 'Tüm kayıtlı hareketler'}</span>

@@ -1,16 +1,21 @@
 import { z } from 'zod';
-import { CURRENCIES, TRANSACTION_TYPES, type ParseResult } from '../../shared/types';
+import { CURRENCIES, TRANSACTION_TYPES, type ParseResult, type AiPlan } from '../../shared/types';
 import { AiSettingsService } from './settings';
 import { AiError } from './errors';
+import { PLAN_INSTRUCTIONS, PLAN_OUTPUT_SCHEMA, parsePlanOutput } from './plan-schema';
 
 export interface AiReferences {
   accounts: { id: string; name: string; type: string; currency: string }[];
   debts: { id: string; name: string; type: string; currency: string; accountId: string | null }[];
   date: string;
   timeZone: string;
+  subscriptions?: { id: string; service: string; currency: string }[];
+  obligations?: { id: string; name: string; currency: string }[];
+  currentCycle?: { id: string; name: string } | null;
 }
 export interface AiInterpreter {
   interpret(text: string, references: AiReferences): Promise<ParseResult>;
+  interpretPlan?(text: string, references: AiReferences): Promise<AiPlan>;
 }
 
 const nullableString = z.string().max(2000).nullable();
@@ -133,6 +138,43 @@ export class OpenAiInterpreter implements AiInterpreter {
     this.timeoutMs = options.timeoutMs ?? 20000;
   }
   async interpret(text: string, references: AiReferences): Promise<ParseResult> {
+    const raw = await this.request(
+      text,
+      references,
+      instructions,
+      TRANSACTION_OUTPUT_SCHEMA,
+      'finance_transaction',
+      2500,
+    );
+    const result = outputValidator.safeParse(raw);
+    if (!result.success)
+      throw new AiError('OpenAI işlem taslağı doğrulanamadı. İşlem kaydedilmedi.', 502);
+    const draft = Object.fromEntries(
+      Object.entries(result.data.draft).filter(([, value]) => value !== null),
+    ) as ParseResult['draft'];
+    return { text, certain: result.data.certain, issues: result.data.issues, draft };
+  }
+  async interpretPlan(text: string, references: AiReferences): Promise<AiPlan> {
+    return parsePlanOutput(
+      text,
+      await this.request(
+        text,
+        references,
+        PLAN_INSTRUCTIONS,
+        PLAN_OUTPUT_SCHEMA,
+        'finance_entry_plan',
+        10000,
+      ),
+    );
+  }
+  private async request(
+    text: string,
+    references: AiReferences,
+    prompt: string,
+    schema: unknown,
+    name: string,
+    maxOutputTokens: number,
+  ): Promise<unknown> {
     const credentials = this.settings.getCredentials();
     if (!credentials)
       throw new AiError('Ayarlar bölümünden OpenAI anahtarınızı ekleyin. İşlem kaydedilmedi.', 503);
@@ -153,15 +195,15 @@ export class OpenAiInterpreter implements AiInterpreter {
         body: JSON.stringify({
           model: credentials.model,
           store: false,
-          max_output_tokens: 2500,
-          instructions,
+          max_output_tokens: maxOutputTokens,
+          instructions: prompt,
           input: [{ role: 'user', content: JSON.stringify({ note: text, references }) }],
           text: {
             format: {
               type: 'json_schema',
-              name: 'finance_transaction',
+              name,
               strict: true,
-              schema: TRANSACTION_OUTPUT_SCHEMA,
+              schema,
             },
           },
         }),
@@ -195,16 +237,11 @@ export class OpenAiInterpreter implements AiInterpreter {
       }
       if (texts.length !== 1)
         throw new AiError('OpenAI tek bir işlem taslağı döndürmedi. İşlem kaydedilmedi.', 502);
-      let parsed: z.infer<typeof outputValidator>;
       try {
-        parsed = outputValidator.parse(JSON.parse(texts[0]));
+        return JSON.parse(texts[0]);
       } catch {
         throw new AiError('OpenAI işlem taslağı doğrulanamadı. İşlem kaydedilmedi.', 502);
       }
-      const draft = Object.fromEntries(
-        Object.entries(parsed.draft).filter(([, value]) => value !== null),
-      ) as ParseResult['draft'];
-      return { text, certain: parsed.certain, issues: parsed.issues, draft };
     } catch (error) {
       if (error instanceof AiError) throw error;
       throw new AiError(

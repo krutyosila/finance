@@ -96,6 +96,23 @@ Yalnızca gerçek işleminizi ifade eden eklemeleri çalıştırın. Başlangı�
 
 Her iki metin ucu OpenAI kullanır, eski yerel ayrıştırıcıya dönmez. Not 1–2000 karakter, `requestId` 8–128 ASCII harf/rakam/alt çizgi/tire olmalıdır. Aynı kimlik ve not başarılı kayıt sonucunu tekrar döndürür; farklı notla aynı kimlik 409 alır. İşlem ve tekrar koruma kaydı aynı SQLite transaction'ında yazılır. Belirsizlik/provider hatasında finans kaydı oluşmaz. Model erişim hataları 502, bağlantı/eksik yapılandırma 503, AI eşzamanlılık veya sağlayıcı kota sınırı 429 olur; sağlayıcının hata gövdesi gösterilmez.
 
+## Bütün kayıt türleri için AI planı
+
+| Yöntem | Yol | Gövde/sonuç |
+| --- | --- | --- |
+| POST | `/api/ai/entry` | `{ "text": "..." }` → `{ text, certain, issues, items }`, yalnız önizleme |
+| POST | `/api/ai/entry/confirm` | `{ "plan": PLAN, "requestId": "..." }` → kaydedilen kayıt kimlikleri veya tamamlanması gereken plan |
+
+Not 1–12.000 karakter, plan en fazla 25 kayıt içerir. Her item `{ "key": "benzersiz_anahtar", "kind": "account", "data": { ... } }` biçimindedir. Türler `transaction`, `account`, `debt`, `obligation`, `subscription`, `cycle`; data alanları ilgili yapılandırılmış oluşturma uçlarıyla aynıdır. AI planında hesap/borcun gerçek açılış bakiyesi (kredi hesabında `currentDebt` de kullanılabilir), abonelik/düzenli ödemenin tutarı, sıklığı ve tarihi zorunludur. Transaction tarihi verilmemişse mevcut zaman, cycle başlangıcı verilmemişse mevcut zaman kullanılır.
+
+Mevcut kayıtlar gerçek kimlikleriyle, aynı plan içindeki kayıtlar `@key` ile bağlanır. `accountId`, `destinationAccountId`, `debtId`, `obligationId`, `subscriptionId` türleri doğrulanır. Kredi hesabının otomatik oluşan borcu `debtId: "@kart_key"` ile kullanılabilir. Planın sırası bağlantı sırasından farklı olabilir; tanımlar önce, para hareketleri muhasebe tarih sırasıyla işlenir. Mevcut veya planda tekrarlanan tanımlar reddedilir; farklı tür/para birimindeki aynı isimli hesap ve borçlar ayrıdır. Bağlı gerçek abonelik/düzenli ödemesinde eksik `accountId`, `category`, `scope` tanımdan yerelde devralınır ve önizlemede gösterilir; açıkça belirtilmiş değerler korunur. Onay `paySubscription`/`payObligation` kontrollerini uygular ve aynı dönemin ikinci ödemesini reddeder.
+
+Önizleme HTTP 200 ile döner ve hiçbir kayıt, audit veya receipt bırakmaz. `certain: false` veya dolu `issues` varsa kullanıcıdan ek bilgi alın; ilk notu ve ek açıklamaları birleştirerek yeniden `/api/ai/entry` gönderin. Tam planda kullanıcı onayından sonra `/confirm` çağırın. Başarı HTTP 201 ve `{ "saved": true, "records": [{ "key": "...", "kind": "...", "id": "..." }] }` döndürür. Muhasebe/eksik alan hatası HTTP 200 ve `{ "saved": false, "confirmation": PLAN }` döndürür; hiçbir öğe kaydedilmez. Geçersiz plan zarfı/alan veya istek kimliği HTTP 400 döndürür.
+
+Onay tek atomik işlemde kayıtları, audit ve tekrar koruma makbuzunu yazar. `requestId` 8–128 ASCII harf/rakam/alt çizgi/tiredir. Aynı kimlik ve aynı plan önceki sonucu döndürür; farklı plan 409 alır. Kimlikler eski tek işlem AI makbuzlarından ayrı `plan:` ad alanında tutulur. Provider tamamlandıktan sonra oturum yeniden doğrulanır; oturumu iptal edilmiş kullanıcıya özel plan döndürülmez. Onayda oturum yazma işleminin içinde de doğrulanır.
+
+Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, kimlikleri, tür/para birimi ve yerel tarih/saat dilimi ile açık dönem adı/kimliğini OpenAI'a gönderir. Mevcut bakiyeler/ücretler, tüm defter ve kimlik bilgileri gönderilmez. Planlı kayıt tanımı gerçekleşmiş gider oluşturmaz; gerçekleşmiş ödeme açıkça istenmişse ilgili ID'ye bağlı transaction oluşturulur. Silme/düzenleme veya banka/dosya içe aktarma bu akışta yoktur.
+
 ## OpenAI ayarları
 
 | Yöntem | Yol                     | Gövde/sonuç                                                                        |

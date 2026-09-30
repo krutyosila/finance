@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { AiSettingsService } from './ai/settings';
 import { OpenAiInterpreter, type AiInterpreter } from './ai/client';
 import { AiEntryService } from './ai/entry';
+import { AiPlanService } from './ai/plan';
 
 interface CliOptions {
   service?: FinanceService;
@@ -98,6 +99,8 @@ const help = {
     'add "450 market"',
     'add --data \'{"type":"EXPENSE","amount":"450","currency":"TRY","description":"Market"}\'',
     'parse "450 market"',
+    'ai preview "Garanti hesabımda 25000 TL var; Netflix aylık 300 TL, her ayın 15\'inde yenileniyor"',
+    'ai confirm --data PLAN_JSON --request-id ID',
     'context | status | today | report [--all --from DATE --to DATE --cycle-id ID]',
     'transactions [--search TEXT --type TYPE --currency CODE --category NAME --account-id ID --scope PERSONAL|BUSINESS --from DATE --to DATE --deleted]',
     'edit ID --data JSON | delete ID | restore ID | duplicate ID',
@@ -163,7 +166,25 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
       all: flags.all === true,
     };
     let result: unknown;
-    if (command === 'add') {
+    if (command === 'ai') {
+      const plans = new AiPlanService(
+        finance,
+        options.aiInterpreter ??
+          new OpenAiInterpreter(new AiSettingsService({ databasePath: finance.databasePath })),
+      );
+      if (action === 'preview')
+        result = await plans.preview(
+          required(parsed.positionals.slice(2).join(' '), 'Kayıt metni'),
+        );
+      else if (action === 'confirm') {
+        const entry = plans.confirm(
+          input(flags),
+          required(stringFlag(flags, 'request-id'), '--request-id'),
+        );
+        print(entry);
+        return entry.saved ? 0 : 2;
+      } else throw new Error('AI eylemi preview veya confirm olmalıdır.');
+    } else if (command === 'add') {
       if (flags.data || flags['json-input'])
         result = finance.createTransaction(input(flags) as never);
       else {

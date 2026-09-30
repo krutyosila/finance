@@ -544,7 +544,7 @@ export class FinanceService {
       throw new Error('Ödemenin para birimi düzenli kayıtla aynı olmalıdır');
     const row: schema.TransactionRow = {
       id: previous?.id ?? randomUUID(),
-      timestamp: p.timestamp ? this.bound(p.timestamp) : now(),
+      timestamp: this.normalizeTransactionTimestamp(p.timestamp),
       type: p.type,
       amountMinor: amount,
       currency: p.currency,
@@ -1290,6 +1290,9 @@ export class FinanceService {
       month: '2-digit',
       day: '2-digit',
     }).format(new Date(timestamp));
+  }
+  normalizeTransactionTimestamp(value?: string): string {
+    return value ? this.bound(value) : now();
   }
   private bound(value: string, end = false): string {
     if (value.length !== 10) return instant(value);

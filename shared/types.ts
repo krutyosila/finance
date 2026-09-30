@@ -208,6 +208,25 @@ export interface EntryResult {
   transaction?: Transaction;
   confirmation?: ParseResult;
 }
+export type AiRecordKind =
+  'transaction' | 'account' | 'debt' | 'obligation' | 'subscription' | 'cycle';
+export type AiRecordDraft = { key: string } & (
+  | { kind: 'transaction'; data: Partial<TransactionInput> }
+  | { kind: 'account'; data: Partial<AccountInput> }
+  | { kind: 'debt'; data: Partial<DebtInput> }
+  | { kind: 'obligation'; data: Partial<ObligationInput> }
+  | { kind: 'subscription'; data: Partial<SubscriptionInput> }
+  | { kind: 'cycle'; data: { name?: string; start?: string } }
+);
+export interface AiPlan {
+  text: string;
+  certain: boolean;
+  issues: string[];
+  items: AiRecordDraft[];
+}
+export type AiPlanResult =
+  | { saved: true; records: { key: string; kind: AiRecordKind; id: string }[] }
+  | { saved: false; confirmation: AiPlan };
 export interface TransactionFilter {
   search?: string;
   type?: string;

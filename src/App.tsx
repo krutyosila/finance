@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -22,8 +22,9 @@ import {
   Waves,
   X,
 } from 'lucide-react';
-import type { FinancialContext, ParseResult, Transaction, TransactionInput } from '../shared/types';
+import type { FinancialContext, AiPlan, Transaction, TransactionInput } from '../shared/types';
 import { api, useResource } from './api';
+import { AiPlanReview } from './components/AiPlanReview';
 import { QuickEntry } from './components/QuickEntry';
 import { RecordForm } from './components/RecordForms';
 import { TransactionForm } from './components/TransactionForm';
@@ -50,13 +51,13 @@ const navigation = [
 ];
 type Mode =
   | { kind: 'quick' }
+  | { kind: 'ai-review'; plan: AiPlan }
   | {
       kind: 'transaction';
       record?: Transaction;
       initial?: Partial<TransactionInput>;
       issues?: string[];
       payPath?: string;
-      aiEntry?: boolean;
     }
   | { kind: 'record'; collection: RecordKind; record?: FinanceRecord }
   | { kind: 'delete'; collection: RecordKind | 'transactions'; record: FinanceRecord | Transaction }
@@ -88,7 +89,7 @@ export function App() {
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [workspaceResult, setWorkspaceResult] = useState('');
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
-  const entryAttempt = useRef<{ text: string; id: string } | null>(null);
+  const [reviewBusy, setReviewBusy] = useState(false);
   const resource = useResource<FinancialContext>('/context', revision);
   const context = resource.data;
   const close = useCallback(() => setMode(null), []);
@@ -98,16 +99,6 @@ export function App() {
     close();
     notify('Kaydedildi. Finansal görünümünüz güncel.');
   }, [close, notify]);
-  const getEntryRequestId = useCallback((text: string) => {
-    if (entryAttempt.current?.text === text) return entryAttempt.current.id;
-    const id = crypto.randomUUID();
-    entryAttempt.current = { text, id };
-    return id;
-  }, []);
-  const entrySaved = useCallback(() => {
-    entryAttempt.current = null;
-    saved();
-  }, [saved]);
   useEffect(() => {
     const onHash = () => {
       setPage(currentPage());
@@ -126,12 +117,12 @@ export function App() {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        if (context) setMode({ kind: 'quick' });
+        if (context && !reviewBusy) setMode({ kind: 'quick' });
       }
     };
     document.addEventListener('keydown', shortcut);
     return () => document.removeEventListener('keydown', shortcut);
-  }, [context]);
+  }, [context, reviewBusy]);
   useEffect(() => {
     const update = () => {
       if (document.visibilityState === 'visible') setRevision((value) => value + 1);
@@ -152,8 +143,8 @@ export function App() {
       window.scrollTo({ top: 0, behavior: 'instant' });
     }
   }
-  function review(result: ParseResult) {
-    setMode({ kind: 'transaction', initial: result.draft, issues: result.issues, aiEntry: true });
+  function review(result: AiPlan) {
+    setMode({ kind: 'ai-review', plan: result });
   }
   function openSettings() {
     close();
@@ -334,8 +325,6 @@ export function App() {
                 <Dashboard
                   context={context}
                   onReview={review}
-                  onEntrySaved={entrySaved}
-                  getEntryRequestId={getEntryRequestId}
                   onSettings={openSettings}
                   navigate={navigate}
                   onCreate={addRecord}
@@ -419,13 +408,7 @@ export function App() {
           onClose={close}
           wide
         >
-          <QuickEntry
-            onReview={review}
-            onSaved={entrySaved}
-            getRequestId={getEntryRequestId}
-            onSettings={openSettings}
-            compact
-          />
+          <QuickEntry onReview={review} onSettings={openSettings} compact />
           <div className="quick-manual">
             <span>Ayrıntıları kendiniz girmek ister misiniz?</span>
             <button className="text-button" onClick={() => setMode({ kind: 'transaction' })}>
@@ -433,6 +416,22 @@ export function App() {
               <ArrowRight size={15} />
             </button>
           </div>
+        </Modal>
+      )}
+      {context && mode?.kind === 'ai-review' && (
+        <Modal
+          title="Kayıtları gözden geçirin"
+          subtitle="Onayladığınızda tüm kayıtlar birlikte kaydedilir."
+          onClose={reviewBusy ? () => {} : close}
+          wide
+        >
+          <AiPlanReview
+            initial={mode.plan}
+            context={context}
+            onClose={close}
+            onSaved={saved}
+            onBusyChange={setReviewBusy}
+          />
         </Modal>
       )}
       {context && mode?.kind === 'transaction' && (
@@ -460,7 +459,7 @@ export function App() {
             issues={mode.issues}
             payPath={mode.payPath}
             onClose={close}
-            onSaved={mode.aiEntry ? entrySaved : saved}
+            onSaved={saved}
           />
         </Modal>
       )}

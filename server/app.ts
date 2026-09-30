@@ -10,6 +10,7 @@ import { AiSettingsService } from './ai/settings';
 import { AiError } from './ai/errors';
 import { OpenAiInterpreter, type AiInterpreter } from './ai/client';
 import { AiEntryService } from './ai/entry';
+import { AiPlanService } from './ai/plan';
 import { registerSettingsRoutes } from './settings-routes';
 
 const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -82,10 +83,9 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     new AiSettingsService({
       databasePath: service.databasePath === ':memory:' ? undefined : service.databasePath,
     });
-  const ai = new AiEntryService(
-    service,
-    options.aiInterpreter ?? new OpenAiInterpreter(aiSettings),
-  );
+  const interpreter = options.aiInterpreter ?? new OpenAiInterpreter(aiSettings);
+  const ai = new AiEntryService(service, interpreter);
+  const plans = new AiPlanService(service, interpreter);
   const authorizeAi = (req: Request) => {
     if (auth && !auth.session(sessionCookie(req.headers.cookie)))
       throw new AuthError('Oturumunuz sona erdi. Devam etmek için tekrar giriş yapın.', 401);
@@ -259,6 +259,16 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     if (typeof input.text !== 'string') throw new Error('text alanı metin olmalıdır.');
     const result = await ai.addText(input.text, input.requestId, () => authorizeAi(req));
     authorizeAi(req);
+    res.status(result.saved ? 201 : 200).json(result);
+  });
+  app.post('/api/ai/entry', async (req, res) => {
+    const result = await plans.preview(body(req).text);
+    authorizeAi(req);
+    res.json(result);
+  });
+  app.post('/api/ai/entry/confirm', (req, res) => {
+    const input = body(req);
+    const result = plans.confirm(input.plan, input.requestId, () => authorizeAi(req));
     res.status(result.saved ? 201 : 200).json(result);
   });
 
