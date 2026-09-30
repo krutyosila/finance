@@ -17,4 +17,15 @@ Tüm yazma denemeleri ayrı geçici veritabanlarında yapıldı. Bu kayıtlar ki
 
 Sunucu giriş testleri HTTPS/origin kısıtlarını, güvenli cookie'yi, süre sonunu, scrypt parolaları, yanlış parola sınırını, kota dolduğunda dahi çıkışı ve yanlış veritabanı yolunda iki veri deposunun korunmasını doğruladı. PWA testleri API yanıtlarının önbellekten dışlanmasını, geç gelen yanıtların çıkıştan sonra kullanılmamasını, sekmeler arası çıkışı ve odak dönüşünde geçerli oturumdaki formun korunmasını doğruladı.
 
+## HTTPS dağıtım doğrulaması
+
+- Sunucuda aynı 151 test ve üretim derlemesi geçti. Diğer uygulamaların Node sürümü değiştirilmedi.
+- Gerçek HTTPS sağlık isteği 200; girişsiz finans isteği 401 ve `Cache-Control: no-store`; HTTP isteği HTTPS'ye 301 döndü.
+- Yönetici girişi, çıkış ve ikinci sekmedeki finans ekranının kapanması tarayıcıda doğrulandı. Finans API ve sunucu CLI sonuçları, isteğe özgü oluşturulma saati dışında aynıydı.
+- Manifest, 512 piksel ikon ve ayrı pencere kurulum ayarları gerçek adreste erişilebilir. 375 piksel telefon görünümü ve işlem önizlemesi kontrol edildi; deneme işlemi kaydedilmedi.
+- Kaynak güncellemesi GitHub'dan alındı; finans ve kimlik yedeklerinden sonra test edilmiş üretim sürümüne geçildi. Son kontrolde yedi finans tablosunun her birinde 0 kayıt, ayrı kimlik deposunda 1 yönetici ve iki SQLite bütünlük kontrolünde `ok` sonucu vardı.
+- Finans ve kimlik dosyaları `finance` kullanıcısına ait 600 izinli dosyalardır. Ortam dosyası root:600; bir kerelik sunucu parola dosyası kaldırıldı.
+
+Bu doğrulamalar gerçek finans verisi içermez. Açık kaynak örnekleri örnek alan adı ve e-posta kullanır; gerçek sunucu adresi, yönetici bilgileri, parolalar ve veritabanları depoya eklenmez. GitHub Actions iş akışı tanımlıdır; hesabın çalıştırma yetkisi ayrıca gereklidir.
+
 Kur ve TRY tutarı elle girilir. Planlı ödemeler otomatik muhasebeleşmez. USDT dahil tutarlar iki ondalık basamakla tutulur. Açılış bakiyeleri defterin başlangıç durumudur; ayrıca bir geçerlilik tarihi taşımaz. Yedek geri yükleme aynı kaynak yolu ve şema için desteklenir. Detaylar [finans kurallarında](FINANCE_RULES.md) ve [kullanım kılavuzunda](../README.md).
