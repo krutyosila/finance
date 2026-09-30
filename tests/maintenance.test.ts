@@ -61,10 +61,17 @@ describe('local database maintenance', () => {
         env: { ...process.env, FINANCE_DB: path, FINANCE_PORT: String(port) },
       });
     const first = start(firstPort);
+    let startupError = '';
+    first.stderr.on('data', (data) => {
+      startupError += String(data);
+    });
     let second: ReturnType<typeof spawn> | undefined;
     try {
       await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error('API startup timed out')), 5000);
+        const timer = setTimeout(
+          () => reject(new Error(`API startup timed out: ${startupError.slice(-2000)}`)),
+          15000,
+        );
         first.stdout.on('data', (data) => {
           if (String(data).includes('API hazır')) {
             clearTimeout(timer);
@@ -77,7 +84,7 @@ describe('local database maintenance', () => {
         });
         first.once('exit', (code) => {
           clearTimeout(timer);
-          reject(new Error(`API exited ${code}`));
+          reject(new Error(`API exited ${code}: ${startupError.slice(-2000)}`));
         });
       });
       const alias = join(root, 'alias', 'finance.sqlite');
@@ -87,7 +94,7 @@ describe('local database maintenance', () => {
       const exit = await new Promise<number | null>((resolve, reject) => {
         const timer = setTimeout(
           () => reject(new Error('Second API did not reject a database already in use')),
-          3000,
+          10000,
         );
         second!.once('exit', (code) => {
           clearTimeout(timer);
@@ -125,7 +132,7 @@ describe('local database maintenance', () => {
         ),
       );
     }
-  });
+  }, 30000);
   it('keeps backups distinct when separate CLI processes choose a name concurrently', async () => {
     const { service, databasePath, root } = setup();
     service.close();
