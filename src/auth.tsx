@@ -21,7 +21,7 @@ import { Button, ErrorMessage, Field, IconButton, Loading } from './components/u
 
 interface AuthState {
   session: AuthSession;
-  logout: () => Promise<void>;
+  logout: (successMessage?: string) => Promise<void>;
 }
 const AuthContext = createContext<AuthState | null>(null);
 
@@ -62,13 +62,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const value = validateSession(await api<AuthSession>('/auth/session'));
       if (current === sequence.current) {
-        if (!canOpenFinancialWorkspace(value)) privateRequests.clear();
+        if (
+          !canOpenFinancialWorkspace(value) ||
+          value.required !== currentSession.current?.required ||
+          value.user?.email !== currentSession.current?.user?.email
+        )
+          privateRequests.clear();
         setSession(value);
       }
     } catch (reason) {
       if (current === sequence.current) {
-        privateRequests.clear();
-        setSession(null);
+        if (suspend) {
+          privateRequests.clear();
+          setSession(null);
+        }
         setError((reason as Error).message);
       }
     } finally {
@@ -98,12 +105,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (
         document.visibilityState !== 'visible' ||
         !currentSession.current ||
+        !currentSession.current.required ||
         !canOpenFinancialWorkspace(currentSession.current)
       )
         return;
       clearTimeout(focusCheck.current);
       focusCheck.current = setTimeout(() => {
-        if (currentSession.current && canOpenFinancialWorkspace(currentSession.current))
+        if (currentSession.current?.required && canOpenFinancialWorkspace(currentSession.current))
           void refreshSession(false);
       }, 80);
     };
@@ -134,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await refreshSession();
     sessionChannel.current?.notify('session-changed');
   }
-  async function logout() {
+  async function logout(successMessage = 'Çıkış yaptınız. Finansal alanınız kapatıldı.') {
     sequence.current += 1;
     clearTimeout(focusCheck.current);
     privateRequests.clear();
@@ -147,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api('/auth/logout', 'POST', {});
       sessionChannel.current?.notify('logout');
-      setMessage('Çıkış yaptınız. Finansal alanınız kapatıldı.');
+      setMessage(successMessage);
     } catch {
       setMessage('Finansal alanınız bu ekranda kapatıldı.');
       setLogoutError(
@@ -176,7 +184,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loggingOut={loggingOut}
       />
     );
-  return <AuthContext.Provider value={{ session, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      key={`${session.required ? 'hosted' : 'local'}:${session.user?.email || ''}`}
+      value={{ session, logout }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

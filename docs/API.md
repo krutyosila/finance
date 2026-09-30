@@ -14,11 +14,14 @@ Başarılı istek JSON döndürür. Oluşturma HTTP 201; okuma, düzenleme ve si
 
 ## Yönetici oturumu
 
-| Yöntem | Yol                 | Gövde/sonuç                                                    |
-| ------ | ------------------- | -------------------------------------------------------------- |
-| GET    | `/api/auth/session` | Giriş gerekliliği ve mevcut oturum                             |
-| POST   | `/api/auth/login`   | `{ "email": "admin@example.com", "password": "..." }` → oturum |
-| POST   | `/api/auth/logout`  | Mevcut oturumu iptal eder; sunucu modunda giriş gerekir        |
+| Yöntem | Yol                  | Gövde/sonuç                                                                  |
+| ------ | -------------------- | ---------------------------------------------------------------------------- |
+| GET    | `/api/auth/session`  | Giriş gerekliliği ve mevcut oturum                                           |
+| POST   | `/api/auth/login`    | `{ "email": "admin@example.com", "password": "..." }` → oturum               |
+| POST   | `/api/auth/logout`   | Mevcut oturumu iptal eder; sunucu modunda giriş gerekir                      |
+| POST   | `/api/auth/password` | `{ "currentPassword": "...", "newPassword": "..." }` → `{ "changed": true }` |
+
+Parola değişimi mevcut yetkili oturumu ve mevcut parolayı gerektirir; yeni parola en az 16 karakterdir. Başarıda tüm oturumlar iptal edilir ve güvenli çerez temizlenir. Yerel modda bu uç 403 döndürür. Logout tekrarlanabilir; geçersiz oturum için de çerezi temizler.
 
 Yanıt biçimi `{ "required": true, "authenticated": true, "user": { "email": "admin@example.com", "role": "ADMIN" } }` olur. Giriş yoksa `authenticated: false`, `user: null` döner. Yerel modda `required: false` olur. Kullanıcı kaydı veya API token oluşturma ucu yoktur; yönetici [sunucuda parola dosyasıyla](DEPLOYMENT.md) oluşturulur.
 
@@ -40,19 +43,19 @@ Durum nesnesi şu alanları içerir: `generatedAt`, `currentCycle`, `accounts`, 
 
 Para toplamları, para biriminden ondalık metne eşlemedir: `{ "TRY": "100.00", "USD": "24.10" }`. Eksik anahtar, o para biriminde katkı yapan kayıt olmadığını belirtir. Tamamen boş toplam `{}` olur. Kullanılmış para birimindeki sıfır sonuç `"0.00"` olarak döner. Açık dönüşüm verilmeden farklı para birimlerini birleştirmeyin.
 
-## İşlemler ve yerel ayrıştırma
+## İşlemler ve OpenAI yorumlama
 
-| Yöntem | Yol                               | Gövde/sonuç                                                |
-| ------ | --------------------------------- | ---------------------------------------------------------- |
-| GET    | `/api/transactions`               | İşlem dizisi                                               |
-| GET    | `/api/transactions/:id`           | Silinmiş kayıt dahil tek işlem                             |
-| POST   | `/api/transactions`               | Yapılandırılmış işlem → kaydedilmiş işlem                  |
-| PATCH  | `/api/transactions/:id`           | Kısmi alanlar → güncellenmiş işlem                         |
-| DELETE | `/api/transactions/:id`           | Geri alınabilir silme → `{ "deleted": true, "id": "..." }` |
-| POST   | `/api/transactions/:id/restore`   | Geri yükleme → doğrulanmış etkin işlem                     |
-| POST   | `/api/transactions/:id/duplicate` | Kopyalama → mevcut zamana ait yeni işlem                   |
-| POST   | `/api/parse`                      | `{ "text": "450 market" }` → yalnızca taslak               |
-| POST   | `/api/ai/transaction`             | `{ "text": "450 market" }` → kayıt veya onay bilgisi       |
+| Yöntem | Yol                               | Gövde/sonuç                                                                           |
+| ------ | --------------------------------- | ------------------------------------------------------------------------------------- |
+| GET    | `/api/transactions`               | İşlem dizisi                                                                          |
+| GET    | `/api/transactions/:id`           | Silinmiş kayıt dahil tek işlem                                                        |
+| POST   | `/api/transactions`               | Yapılandırılmış işlem → kaydedilmiş işlem                                             |
+| PATCH  | `/api/transactions/:id`           | Kısmi alanlar → güncellenmiş işlem                                                    |
+| DELETE | `/api/transactions/:id`           | Geri alınabilir silme → `{ "deleted": true, "id": "..." }`                            |
+| POST   | `/api/transactions/:id/restore`   | Geri yükleme → doğrulanmış etkin işlem                                                |
+| POST   | `/api/transactions/:id/duplicate` | Kopyalama → mevcut zamana ait yeni işlem                                              |
+| POST   | `/api/parse`                      | `{ "text": "450 market" }` → yalnızca taslak                                          |
+| POST   | `/api/ai/transaction`             | `{ "text": "450 market", "requestId": "BENZERSIZ_KIMLIK" }` → kayıt veya onay bilgisi |
 
 Liste filtreleri: `search`, `type`, `currency`, `category`, `accountId`, `scope`, `from`, `to`, `deleted=true`. Varsayılan yalnızca etkin işlemlerdir. `deleted=true` yalnızca silinmiş işlemleri döndürür.
 
@@ -90,6 +93,18 @@ curl -s http://127.0.0.1:4317/api/transactions \
 Yalnızca gerçek işleminizi ifade eden eklemeleri çalıştırın. Başlangıçta örnek kayıt oluşturulmaz.
 
 `POST /api/parse` hiçbir şey kaydetmez; `{ text, draft, certain, issues }` döndürür. `POST /api/ai/transaction`, sınıflandırma ve referanslar kesin olduğunda HTTP 201 ile `{ saved: true, transaction }` döndürür. Aksi halde HTTP 200 ve `{ saved: false, confirmation: { text, draft, certain, issues } }` döner; hiçbir işlem oluşturulmaz. Onay formunu gösterin, ardından kullanıcının seçtiği alanları `POST /api/transactions` ile gönderin.
+
+Her iki metin ucu OpenAI kullanır, eski yerel ayrıştırıcıya dönmez. Not 1–2000 karakter, `requestId` 8–128 ASCII harf/rakam/alt çizgi/tire olmalıdır. Aynı kimlik ve not başarılı kayıt sonucunu tekrar döndürür; farklı notla aynı kimlik 409 alır. İşlem ve tekrar koruma kaydı aynı SQLite transaction'ında yazılır. Belirsizlik/provider hatasında finans kaydı oluşmaz. Model erişim hataları 502, bağlantı/eksik yapılandırma 503, AI eşzamanlılık veya sağlayıcı kota sınırı 429 olur; sağlayıcının hata gövdesi gösterilmez.
+
+## OpenAI ayarları
+
+| Yöntem | Yol                     | Gövde/sonuç                                                                        |
+| ------ | ----------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/settings/ai`      | `{ "provider": "openai", "configured": false, "model": "gpt-5.4-mini" }`           |
+| PATCH  | `/api/settings/ai`      | `{ "apiKey": "...", "model": "gpt-5.4-mini" }` → aynı durum biçimi                 |
+| POST   | `/api/settings/ai/test` | Model erişimini test eder → `{ "ok": true, "provider": "openai", "model": "..." }` |
+
+Sunucu modunda bu uçlar yönetici oturumu ve mutasyonlarda tam Origin ister. Anahtar hiçbir yanıtta dönmez. PATCH en az bir alan ister; `apiKey` gönderilmezse mevcut anahtar korunur. Model Responses/Structured Outputs desteklemelidir. Model erişimi testi `/v1/models/{model}` kullanır; finans notu göndermez. Yorumlama isteği not ve sınırlı hesap/borç referanslarını gönderir; bütün defter/bakiyeler gönderilmez.
 
 ## Hesaplar, borçlar, düzenli yükümlülükler ve abonelikler
 

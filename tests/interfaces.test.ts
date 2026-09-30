@@ -7,6 +7,22 @@ import { request as httpRequest } from 'node:http';
 import { FinanceService } from '../server/core/service';
 import { createApp } from '../server/app';
 import { runCli } from '../server/cli';
+import type { AiInterpreter } from '../server/ai/client';
+import { AiSettingsService } from '../server/ai/settings';
+
+const model: AiInterpreter = {
+  interpret: async (text) => ({
+    text,
+    certain: text !== '450 gizemli',
+    issues: text === '450 gizemli' ? ['İşlem türünü belirtin.'] : [],
+    draft: {
+      type: text === '1500 ödeme geldi' ? 'INCOME' : 'EXPENSE',
+      amount: text === '1500 ödeme geldi' ? '1500' : '450',
+      currency: 'TRY',
+      description: 'AI test sonucu',
+    },
+  }),
+};
 
 const roots: string[] = [];
 const services: FinanceService[] = [];
@@ -18,8 +34,11 @@ function service() {
   services.push(result);
   return result;
 }
-async function api(finance: FinanceService) {
-  const server = createApp(finance).listen(0, '127.0.0.1');
+async function api(finance: FinanceService, aiInterpreter: AiInterpreter | undefined = model) {
+  const server = createApp(finance, {
+    aiInterpreter,
+    aiSettings: new AiSettingsService({ databasePath: finance.databasePath }),
+  }).listen(0, '127.0.0.1');
   servers.push(server);
   await new Promise<void>((resolve, reject) => {
     server.once('listening', resolve);
@@ -61,6 +80,7 @@ async function cli(finance: FinanceService, args: string[]) {
     stderr = '';
   const status = await runCli(args, {
     service: finance,
+    aiInterpreter: model,
     stdout: (text) => {
       stdout += text;
     },
@@ -103,13 +123,13 @@ describe('shared API and CLI financial interfaces', () => {
     }
   });
 
-  it('uses the same parser for API and CLI additions and never commits uncertain input', async () => {
+  it('uses the AI interpreter for API and CLI additions and never commits uncertain input', async () => {
     const finance = service();
     const request = await api(finance);
     const added = await request('/api/ai/transaction', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ text: '450 market' }),
+      body: JSON.stringify({ text: '450 market', requestId: 'interface-api-entry' }),
     });
     expect(added.status).toBe(201);
     expect((await added.json()).saved).toBe(true);
@@ -121,6 +141,65 @@ describe('shared API and CLI financial interfaces', () => {
     expect(command.status).toBe(0);
     const context = await (await request('/api/context')).json();
     expect(context.metrics).toEqual(finance.getContext().metrics);
+  });
+
+  it('previews through AI without saving, requires a request ID and preserves records on duplicate delivery', async () => {
+    const finance = service(),
+      request = await api(finance);
+    const post = (path: string, body: unknown) =>
+      request(path, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    expect((await post('/api/parse', { text: '450 market' })).status).toBe(200);
+    expect(finance.listTransactions()).toHaveLength(0);
+    expect((await post('/api/ai/transaction', { text: '450 market' })).status).toBe(400);
+    const first = await post('/api/ai/transaction', {
+      text: '450 market',
+      requestId: 'interface-retry-id',
+    });
+    const again = await post('/api/ai/transaction', {
+      text: '450 market',
+      requestId: 'interface-retry-id',
+    });
+    expect(await again.json()).toEqual(await first.json());
+    expect(
+      (await post('/api/ai/transaction', { text: 'different', requestId: 'interface-retry-id' }))
+        .status,
+    ).toBe(409);
+    expect(finance.listTransactions()).toHaveLength(1);
+  });
+
+  it('requires configured AI for natural language while manual entry remains available', async () => {
+    const finance = service(),
+      request = await api(finance, {
+        interpret: async () => {
+          throw new Error('No model available');
+        },
+      });
+    const response = await request('/api/ai/transaction', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '450 market', requestId: 'unavailable-ai-id' }),
+    });
+    expect(response.status).toBe(400);
+    expect(finance.listTransactions()).toHaveLength(0);
+    let stdout = '',
+      stderr = '';
+    const status = await runCli(['add', '450 market', '--json'], {
+      service: finance,
+      stdout: (value) => {
+        stdout += value;
+      },
+      stderr: (value) => {
+        stderr += value;
+      },
+    });
+    expect(status).toBe(1);
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr).error).toContain('Ayarlar');
+    expect(finance.listTransactions()).toHaveLength(0);
   });
 
   it('supports structured CLI CRUD, soft deletion, restoration, and duplicate through one service', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -17,6 +17,7 @@ import {
   ReceiptText,
   Repeat2,
   ShieldCheck,
+  Settings2,
   Wallet,
   Waves,
   X,
@@ -33,6 +34,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Transactions } from './pages/Transactions';
 import { Records, type FinanceRecord, type RecordKind } from './pages/Records';
 import { Reports } from './pages/Reports';
+import { Settings } from './pages/Settings';
 import { useAuth } from './auth';
 import { InstallPanel, OfflineBanner, usePwa } from './pwa';
 
@@ -44,6 +46,7 @@ const navigation = [
   { title: 'Düzenli ödemeler', icon: Repeat2, path: 'recurring' },
   { title: 'Abonelikler', icon: CreditCard, path: 'subscriptions' },
   { title: 'Raporlar', icon: ChartNoAxesCombined, path: 'reports' },
+  { title: 'Ayarlar', icon: Settings2, path: 'settings' },
 ];
 type Mode =
   | { kind: 'quick' }
@@ -53,6 +56,7 @@ type Mode =
       initial?: Partial<TransactionInput>;
       issues?: string[];
       payPath?: string;
+      aiEntry?: boolean;
     }
   | { kind: 'record'; collection: RecordKind; record?: FinanceRecord }
   | { kind: 'delete'; collection: RecordKind | 'transactions'; record: FinanceRecord | Transaction }
@@ -84,6 +88,7 @@ export function App() {
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
   const [workspaceResult, setWorkspaceResult] = useState('');
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
+  const entryAttempt = useRef<{ text: string; id: string } | null>(null);
   const resource = useResource<FinancialContext>('/context', revision);
   const context = resource.data;
   const close = useCallback(() => setMode(null), []);
@@ -93,6 +98,16 @@ export function App() {
     close();
     notify('Kaydedildi. Finansal görünümünüz güncel.');
   }, [close, notify]);
+  const getEntryRequestId = useCallback((text: string) => {
+    if (entryAttempt.current?.text === text) return entryAttempt.current.id;
+    const id = crypto.randomUUID();
+    entryAttempt.current = { text, id };
+    return id;
+  }, []);
+  const entrySaved = useCallback(() => {
+    entryAttempt.current = null;
+    saved();
+  }, [saved]);
   useEffect(() => {
     const onHash = () => {
       setPage(currentPage());
@@ -138,7 +153,11 @@ export function App() {
     }
   }
   function review(result: ParseResult) {
-    setMode({ kind: 'transaction', initial: result.draft, issues: result.issues });
+    setMode({ kind: 'transaction', initial: result.draft, issues: result.issues, aiEntry: true });
+  }
+  function openSettings() {
+    close();
+    navigate('Ayarlar');
   }
   function addRecord(collection: RecordKind) {
     setMode({ kind: 'record', collection });
@@ -295,7 +314,9 @@ export function App() {
         </header>
         <main id="main-content" className="main-content" tabIndex={-1}>
           <OfflineBanner />
-          {resource.error ? (
+          {page === 'Ayarlar' ? (
+            <Settings />
+          ) : resource.error ? (
             <div className="connection-error">
               <Database size={34} />
               <h1>Finansal alanınıza yeniden bağlanalım.</h1>
@@ -313,6 +334,9 @@ export function App() {
                 <Dashboard
                   context={context}
                   onReview={review}
+                  onEntrySaved={entrySaved}
+                  getEntryRequestId={getEntryRequestId}
+                  onSettings={openSettings}
                   navigate={navigate}
                   onCreate={addRecord}
                   onCycle={() => setMode({ kind: 'cycle' })}
@@ -395,7 +419,13 @@ export function App() {
           onClose={close}
           wide
         >
-          <QuickEntry onReview={review} compact />
+          <QuickEntry
+            onReview={review}
+            onSaved={entrySaved}
+            getRequestId={getEntryRequestId}
+            onSettings={openSettings}
+            compact
+          />
           <div className="quick-manual">
             <span>Ayrıntıları kendiniz girmek ister misiniz?</span>
             <button className="text-button" onClick={() => setMode({ kind: 'transaction' })}>
@@ -430,7 +460,7 @@ export function App() {
             issues={mode.issues}
             payPath={mode.payPath}
             onClose={close}
-            onSaved={saved}
+            onSaved={mode.aiEntry ? entrySaved : saved}
           />
         </Modal>
       )}

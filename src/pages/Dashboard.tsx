@@ -21,6 +21,9 @@ import { useAuth } from '../auth';
 export function Dashboard({
   context,
   onReview,
+  onEntrySaved,
+  getEntryRequestId,
+  onSettings,
   navigate,
   onCreate,
   onCycle,
@@ -29,6 +32,9 @@ export function Dashboard({
 }: {
   context: FinancialContext;
   onReview: (result: ParseResult) => void;
+  onEntrySaved: () => void;
+  getEntryRequestId: (text: string) => string;
+  onSettings: () => void;
   navigate: (page: string) => void;
   onCreate: (kind: 'accounts' | 'debts' | 'recurring' | 'subscriptions') => void;
   onCycle: () => void;
@@ -118,7 +124,12 @@ export function Dashboard({
           {date(new Date().toISOString())}
         </div>
       </div>
-      <QuickEntry onReview={onReview} />
+      <QuickEntry
+        onReview={onReview}
+        onSaved={onEntrySaved}
+        getRequestId={getEntryRequestId}
+        onSettings={onSettings}
+      />
       <div className="overview-head">
         <h2>Finansal görünümünüz</h2>
         <span>{context.currentCycle ? context.currentCycle.name : 'Tüm kayıtlı hareketler'}</span>

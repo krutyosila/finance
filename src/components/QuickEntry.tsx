@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowRight, CornerDownLeft, LoaderCircle, Sparkles } from 'lucide-react';
-import type { ParseResult } from '../../shared/types';
+import type { EntryResult, ParseResult } from '../../shared/types';
 import { api } from '../api';
 import { Button, ErrorMessage } from './ui';
 import { useAuth } from '../auth';
@@ -8,9 +8,15 @@ import { usePwa } from '../pwa';
 
 export function QuickEntry({
   onReview,
+  onSaved,
+  getRequestId,
+  onSettings,
   compact = false,
 }: {
   onReview: (result: ParseResult) => void;
+  onSaved: () => void;
+  getRequestId: (text: string) => string;
+  onSettings: () => void;
   compact?: boolean;
 }) {
   const { session } = useAuth();
@@ -24,7 +30,14 @@ export function QuickEntry({
     setBusy(true);
     setError('');
     try {
-      onReview(await api<ParseResult>('/parse', 'POST', { text: text.trim() }));
+      const note = text.trim();
+      const result = await api<EntryResult>('/ai/transaction', 'POST', {
+        text: note,
+        requestId: getRequestId(note),
+      });
+      if (result.saved && result.transaction) onSaved();
+      else if (!result.saved && result.confirmation) onReview(result.confirmation);
+      else throw new Error('İşlemin sonucu doğrulanamadı. Aynı notla yeniden deneyin.');
       setText('');
     } catch (reason) {
       setError((reason as Error).message);
@@ -55,24 +68,31 @@ export function QuickEntry({
             autoComplete="off"
             autoFocus={compact}
             maxLength={2000}
+            disabled={busy}
           />
           <Button
             disabled={!text.trim() || busy || !online}
             type="submit"
-            aria-label="İşlemi gözden geçirin"
+            aria-label="Yapay zekâ ile işlemi ekle"
           >
             {busy ? <LoaderCircle size={19} className="spin" /> : <ArrowRight size={20} />}
-            <span>Gözden geçir</span>
+            <span>{busy ? 'Yorumlanıyor…' : 'AI ile ekle'}</span>
           </Button>
         </div>
         <div className="quick-foot">
-          <p>Doğal bir dille yazın. Kaydetmeden önce ayrıntıları kontrol edin.</p>
+          <p>Açık işlemler kaydedilir; eksik ayrıntılar sizden istenir.</p>
           <span>
-            <CornerDownLeft size={13} /> Enter ile gözden geçir
+            <CornerDownLeft size={13} /> Enter ile ekle
           </span>
         </div>
       </form>
       {error && <ErrorMessage message={error} />}
+      <div className="quick-ai-note">
+        <p>Notunuz, hesap ve borç adlarınız OpenAI ile paylaşılır.</p>
+        <button type="button" className="text-button" onClick={onSettings}>
+          OpenAI ayarları
+        </button>
+      </div>
     </section>
   );
 }

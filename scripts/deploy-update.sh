@@ -74,12 +74,12 @@ chown -R --no-dereference "$finance_build_user:$finance_build_user" "$finance_st
   cd "$finance_stage"
   for finance_npm_action in ci test build; do
     if [[ "$finance_npm_action" == ci ]]; then
-      runuser -u "$finance_build_user" -- env -u FINANCE_DB -u FINANCE_AUTH_DB -u FINANCE_PUBLIC_URL -u FINANCE_PORT -u FINANCE_SESSION_SECRET \
+      runuser -u "$finance_build_user" -- env -u FINANCE_DB -u FINANCE_AUTH_DB -u FINANCE_PUBLIC_URL -u FINANCE_PORT -u FINANCE_SESSION_SECRET -u FINANCE_AI_CONFIG -u OPENAI_API_KEY \
         PATH="$finance_runtime_path" NODE_ENV=development "$finance_npm_bin" ci --include=dev --cache /var/cache/finance-build/npm
     else
       finance_npm_environment=development
       if [[ "$finance_npm_action" == build ]]; then finance_npm_environment=production; fi
-      runuser -u "$finance_build_user" -- env -u FINANCE_DB -u FINANCE_AUTH_DB -u FINANCE_PUBLIC_URL -u FINANCE_PORT -u FINANCE_SESSION_SECRET \
+      runuser -u "$finance_build_user" -- env -u FINANCE_DB -u FINANCE_AUTH_DB -u FINANCE_PUBLIC_URL -u FINANCE_PORT -u FINANCE_SESSION_SECRET -u FINANCE_AI_CONFIG -u OPENAI_API_KEY \
         PATH="$finance_runtime_path" NODE_ENV="$finance_npm_environment" "$finance_npm_bin" run "$finance_npm_action"
     fi
   done

@@ -1,6 +1,6 @@
 # Still Finance
 
-Yerelde veya kendi HTTPS sunucunuzda çalışan kişisel finans uygulaması. Web arayüzü, REST API ve komut satırı aynı SQLite muhasebe servisini kullanır. Yerel kullanımda internet gerekmez; sunucu kullanımında telefon/bilgisayar aynı sunucu defterine bağlanır. Bulut veritabanı, AI aboneliği veya internetten kur alma yoktur. Başlangıçta örnek finans kaydı oluşturulmaz.
+Yerelde veya kendi HTTPS sunucunuzda çalışan kişisel finans uygulaması. Web arayüzü, REST API ve komut satırı aynı SQLite muhasebe servisini kullanır. Yerelde elle kayıt ve rapor için internet gerekmez; sunucu kullanımında telefon/bilgisayar aynı sunucu defterine bağlanır. AI hızlı giriş OpenAI API anahtarı ve internet gerektirir; API kullanımı OpenAI hesabınıza ücret yansıtabilir. İnternetten kur alınmaz. Başlangıçta örnek finans kaydı oluşturulmaz.
 
 Kaynak deposu: [krutyosila/finance](https://github.com/krutyosila/finance). Kaynak kodu MIT lisanslıdır; kişisel veritabanları, oturumlar, parolalar, ortam dosyaları ve yedekler açık kaynak depoya dahil değildir. [Sunucu kurulum kılavuzu](docs/DEPLOYMENT.md), `finance.example.com` hedefi için şablonları açıklar. Bu belgede hedef adres bulunması, dağıtımın tamamlandığı anlamına gelmez.
 
@@ -52,6 +52,8 @@ HTTPS uygulamasını bir PWA olarak yükleyebilirsiniz. Destekleyen tarayıcıda
 
 ## Hızlı kayıt
 
+**Ayarlar → OpenAI bağlantısı** bölümünde anahtarınızı ekleyin, modeli seçin ve **Bağlantıyı test et** düğmesiyle erişimi doğrulayın. Başlangıç modeli `gpt-5.4-mini`; seçtiğiniz model Responses API ve Structured Outputs desteklemelidir. Test anahtar/model erişimini kontrol eder; yorumlama veya kota garantisi vermez. Anahtar giriş kutusu tekrar doldurulmaz ve API anahtarı tarayıcıya geri verilmez. Boş bırakarak yalnız modeli değiştirebilirsiniz. **Ayarlar → Giriş şifresi** bölümünde mevcut parolanızı doğrulayarak en az 16 karakterli yeni parola belirleyebilirsiniz; bütün oturumlar kapanır.
+
 **Ne oldu?** alanına Türkçe finans metni yazın veya CLI kullanın:
 
 ```sh
@@ -60,7 +62,13 @@ npm run finance -- add "128000 ödeme geldi"
 npm run finance -- parse "24 USD domain yenilendi" --json
 ```
 
-Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Yerel ayrıştırıcı yaygın finans ifadelerini tanır. Belirsiz kayıtlar web arayüzünde onay formuna gider. CLI ise `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları siz seçerek yapılandırılmış işlem gönderin. Borç kaydı eşleşen mevcut bir borç gerektirir; birden fazla eşleşme varsa onay gerekir.
+Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Metni OpenAI yorumlar; tek açık işlem sunucudaki muhasebe kontrollerinden geçip doğrudan kaydedilir. Belirsiz veya birden fazla ayrı işlem web arayüzünde onay formuna gider. CLI ise `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları siz seçerek yapılandırılmış işlem gönderin. Borç kaydı eşleşen mevcut bir borç gerektirir; birden fazla eşleşme varsa onay gerekir. Anahtar yoksa, bağlantı/biçim/kota hatasında kayıt yapılmaz; eski ayrıştırıcıya dönülmez.
+
+OpenAI'a yazdığınız not, mevcut hesap/borç adları ve kimlikleri, türleri ve para birimleri ile güncel yerel tarih gönderilir. Bütün işlem defteri, bakiyeler, e-posta ve giriş parolanız gönderilmez. İstek `store: false` kullanır; bu seçenek bütün sağlayıcı veri saklama politikalarının kapatılması anlamına gelmez. Uygulama [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) ile izinli işlem alanlarını alır. Model komut çalıştıramaz ve finans kurallarını değiştiremez.
+
+Tarayıcı aynı notun başarısız ağ isteğini yeniden gönderirken istek kimliğini korur. Sunucu başarılı kayıt sonucunu finans SQLite dosyasında atomik saklar; aynı kimlik ve not yeni işlem oluşturmaz. CLI ile kontrollü tekrar için `add "450 market" --request-id BENZERSIZ_KIMLIK` kullanın. Ayrı yeni kimlik yeni işlem anlamına gelir.
+
+Anahtar özel 600 izinli `ai-config.json` dosyasında tutulur; varsayılan yer finans veritabanının klasörüdür. `FINANCE_AI_CONFIG` ile ayrı güvenli JSON yolu belirlenebilir. Sunucu modunda kaynak/release ağacının dışında olmalıdır; yerelde proje içindeki `data/` kullanılabilir. `OPENAI_API_KEY` ortam anahtarı dosyada anahtar yoksa kullanılabilir; panelde kaydedilen anahtar önceliklidir. Finans export'u ve finans/auth SQLite yedekleri bu anahtarı içermez. Yapılandırmayı ayrıca özel yedekleyin veya kurtarma sonrasında anahtarı panelden tekrar girin. Dosya düz metindir; disk şifrelemesi sağlamaz.
 
 Kur tahmin etmeyin. Gerçek TL tutarı veya kur girmediğiniz sürece `24 USD`, USD olarak kalır. Para değerlerini `"24.10"` gibi en fazla iki ondalık basamaklı **metin** olarak girin. API çıktıları da ondalık metin kullanır. Bu uygulamada USDT de iki ondalık basamakla tutulur. Hesaplama ayrıntıları için [finans kurallarına](docs/FINANCE_RULES.md) bakın.
 
@@ -176,6 +184,6 @@ npm run typecheck
 npm run build
 ```
 
-Otomatik testler ayrı geçici veritabanları kullanır. Muhasebe anlamlarını, ortak servis/API/CLI davranışını, ayrıştırıcı onayını, silme/geri yüklemeyi, dışa aktarmayı ve yedek güvenliğini doğrular. `data/finance.sqlite` dosyasını örnek kayıtlarla doldurmazlar.
+Otomatik testler ayrı geçici veritabanları ve kontrollü sağlayıcı yanıtları kullanır. Muhasebe anlamlarını, API/CLI AI davranışını, belirsizlik ve çift kayıt korumasını, anahtar gizliliğini, parola değişimini, silme/geri yüklemeyi, dışa aktarmayı ve yedek güvenliğini doğrular. Gerçek OpenAI hesabına ücretli test isteği göndermezler; `data/finance.sqlite` dosyasını örnek kayıtlarla doldurmazlar.
 
-Ayrıştırıcı belirli Türkçe ifadelerle sınırlı ve deterministiktir. Banka içe aktarma, dış AI bağlantısı, otomatik kur, yatırım değerleme, otomatik defter eşitleme, disk verisi şifreleme veya otomatik planlı tahsilat yoktur. Uygulama tek yöneticiye yönelik bir SQLite defteridir. Grafikler ve raporlar yalnızca sizin girdiğiniz gerçek kayıtları kullanır.
+AI yorumları hatalı olabilir; kaydedilen işlemleri kontrol edip düzenleyebilirsiniz. Banka içe aktarma, otomatik kur, yatırım değerleme, otomatik defter eşitleme, disk verisi şifreleme veya otomatik planlı tahsilat yoktur. Uygulama tek yöneticiye yönelik bir SQLite defteridir. Grafikler ve raporlar yalnızca sizin girdiğiniz gerçek kayıtları kullanır.

@@ -16,7 +16,7 @@ Kurulan uygulama kendi penceresinde açılır. Uygulama kimliği ve başlangıç
 
 Finansal arayüz açılmadan önce `/api/auth/session` doğrulanır. Korumalı web sürümünde giriş gereklidir; yerel modda bu doğrulama giriş ekranı gerektirmeyebilir. E-posta ve parola kaynak kodda sabit değildir. Form parola yöneticisini ve yapıştırmayı destekler.
 
-Parola yalnızca giriş isteğinde gönderilir. Tarayıcıdaki JavaScript oturum çerezini okumaz; çerez sunucu tarafından yönetilir. Girişten sonra oturum yeniden doğrulanır. **Çıkış yap**, sunucu oturumunu sonlandırır ve finansal arayüzü kaldırır. Açık istekler iptal edilir; önceki oturuma ait gecikmiş yanıtların yeni ekrana ulaşması engellenir. Sunucuya ulaşılamazsa arayüz yine kapanır ve çıkışın sunucuda tamamlanamadığı açıkça belirtilir.
+Parola giriş ve kullanıcı tarafından başlatılan parola değişimi isteklerinde gönderilir. **Ayarlar → Giriş şifresi**, mevcut parola doğrulamasından sonra bütün oturumları kapatır. Tarayıcıdaki JavaScript oturum çerezini okumaz; çerez sunucu tarafından yönetilir. Girişten sonra oturum yeniden doğrulanır. **Çıkış yap**, sunucu oturumunu sonlandırır ve finansal arayüzü kaldırır. Açık istekler iptal edilir; önceki oturuma ait gecikmiş yanıtların yeni ekrana ulaşması engellenir. Sunucuya ulaşılamazsa arayüz yine kapanır ve çıkışın sunucuda tamamlanamadığı açıkça belirtilir.
 
 Finansal bir API isteği `401` döndürürse yanıt gövdesi beklenmeden giriş ekranına dönülür. Aynı tarayıcıdaki diğer sekmeler çıkış bildirimiyle finansal arayüzünü kapatır. BroadcastChannel yalnız `logout` ve `session-changed` sinyallerini taşır; finansal veri veya parola taşımaz, kalıcı depolama kullanmaz. Sayfa yeniden görünür olduğunda veya odaklandığında oturum yeniden denetlenir; geçerli bir oturumda açık form korunur. Geri/ileri önbelleğinden geri yüklenen sayfada finansal arayüz açılmadan oturum doğrulanır.
 
@@ -27,6 +27,8 @@ Service worker yalnızca üretim derlemesinde kaydedilir. Önbellek izin listesi
 Finansal API yanıtları, giriş bilgileri ve dışa aktarılan kayıtlar Cache Storage, localStorage, sessionStorage veya IndexedDB’ye yazılmaz. Açılış sayfası ağdan istenir; çevrimdışıyken yalnızca bağlantı gerektiğini anlatan statik ekran gösterilir. Açık bir oturumdaki görüntülenen veriler yalnızca bellektedir; kalıcı çevrimdışı erişim sağlanmaz.
 
 Yeni kayıt oluşturmak, kayıt değiştirmek, rapor okumak ve giriş yapmak sunucu bağlantısı gerektirir. Çevrimdışı işlemler sıraya alınmaz ve sonradan otomatik kaydedilmez. Yerel bilgisayarın veritabanı kendiliğinden telefona veya web sunucusuna aktarılmaz.
+
+**Ayarlar → OpenAI bağlantısı** ile kaydedilen anahtar sunucuda saklanır; tarayıcıda tekrar gösterilmez veya önbelleğe alınmaz. AI hızlı giriş ayrıca OpenAI internet bağlantısı ister ve notunuzla hesap/borç referanslarını sağlayıcıya gönderir. Açık işlem kaydedilir; belirsiz taslak onay formunda gösterilir. Anahtar yoksa veya sağlayıcı isteği başarısızsa kayıt yapılmaz. Aynı notun ağ hatasından sonra tekrar gönderimi aynı istek kimliğini yalnız açık uygulamanın belleğinde tutar; uygulamayı tamamen yeniden açmak yeni istek oluşturur.
 
 ## Doğrulama
 

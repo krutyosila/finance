@@ -23,15 +23,20 @@ export function openDatabase(path = resolve(PROJECT_ROOT, 'data/finance.sqlite')
   sqlite.exec(
     'CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL)',
   );
-  const migration = sqlite.prepare('SELECT version FROM schema_migrations WHERE version=1').get();
-  if (!migration)
-    sqlite.transaction(() => {
-      sqlite.exec(
-        readFileSync(resolve(PROJECT_ROOT, 'server/migrations/0001_initial.sql'), 'utf8'),
-      );
-      sqlite
-        .prepare('INSERT INTO schema_migrations(version,applied_at) VALUES (1,?)')
-        .run(new Date().toISOString());
-    })();
+  for (const [version, file] of [
+    [1, '0001_initial.sql'],
+    [2, '0002_ai_entry_receipts.sql'],
+  ] as const) {
+    const migration = sqlite
+      .prepare('SELECT version FROM schema_migrations WHERE version=?')
+      .get(version);
+    if (!migration)
+      sqlite.transaction(() => {
+        sqlite.exec(readFileSync(resolve(PROJECT_ROOT, 'server/migrations', file), 'utf8'));
+        sqlite
+          .prepare('INSERT INTO schema_migrations(version,applied_at) VALUES (?,?)')
+          .run(version, new Date().toISOString());
+      })();
+  }
   return { sqlite, db: drizzle(sqlite), databasePath: path };
 }

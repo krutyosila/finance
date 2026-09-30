@@ -6,6 +6,11 @@ import type { FinanceService } from './core/service';
 import type { TransactionFilter } from '../shared/types';
 import { backupDatabase, exportFinancialState } from './maintenance';
 import { AuthService, AuthError, parsePublicURL, SESSION_COOKIE, sessionCookie } from './auth';
+import { AiSettingsService } from './ai/settings';
+import { AiError } from './ai/errors';
+import { OpenAiInterpreter, type AiInterpreter } from './ai/client';
+import { AiEntryService } from './ai/entry';
+import { registerSettingsRoutes } from './settings-routes';
 
 const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
 const localPorts = new Set(['4317', '5173']);
@@ -48,6 +53,8 @@ export interface AppOptions {
   publicUrl?: string | null;
   auth?: AuthService;
   authDatabasePath?: string;
+  aiSettings?: AiSettingsService;
+  aiInterpreter?: AiInterpreter;
 }
 export function createApp(service: FinanceService, options: AppOptions = {}) {
   const app = express(),
@@ -70,6 +77,19 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
       throw new Error('Kimlik ve finans veritabanları ayrı dosyalarda tutulmalıdır.');
   }
   const auth = publicURL ? (options.auth ?? new AuthService(authPath)) : null;
+  const aiSettings =
+    options.aiSettings ??
+    new AiSettingsService({
+      databasePath: service.databasePath === ':memory:' ? undefined : service.databasePath,
+    });
+  const ai = new AiEntryService(
+    service,
+    options.aiInterpreter ?? new OpenAiInterpreter(aiSettings),
+  );
+  const authorizeAi = (req: Request) => {
+    if (auth && !auth.session(sessionCookie(req.headers.cookie)))
+      throw new AuthError('Oturumunuz sona erdi. Devam etmek için tekrar giriş yapın.', 401);
+  };
   app.locals.authService = auth;
   app.locals.authOwned = !!auth && !options.auth;
   app.disable('x-powered-by');
@@ -191,6 +211,7 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
   app.get(['/api/context', '/api/ai/context', '/api/reports'], (req, res) =>
     res.json(service.getContext(period(req))),
   );
+  registerSettingsRoutes(app, auth, aiSettings);
   app.get('/api/transactions', (req, res) => {
     const filter: TransactionFilter = {};
     for (const key of [
@@ -226,15 +247,18 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
   app.post('/api/transactions/:id/duplicate', (req, res) =>
     res.status(201).json(service.duplicateTransaction(req.params.id)),
   );
-  app.post('/api/parse', (req, res) => {
+  app.post('/api/parse', async (req, res) => {
     const input = body(req);
     if (typeof input.text !== 'string') throw new Error('text alanı metin olmalıdır.');
-    res.json(service.parse(input.text));
+    const result = await ai.interpret(input.text);
+    authorizeAi(req);
+    res.json(result);
   });
-  app.post('/api/ai/transaction', (req, res) => {
+  app.post('/api/ai/transaction', async (req, res) => {
     const input = body(req);
     if (typeof input.text !== 'string') throw new Error('text alanı metin olmalıdır.');
-    const result = service.addText(input.text);
+    const result = await ai.addText(input.text, input.requestId, () => authorizeAi(req));
+    authorizeAi(req);
     res.status(result.saved ? 201 : 200).json(result);
   });
 
@@ -318,7 +342,7 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     if (error instanceof AuthError && error.retryAfter)
       res.setHeader('Retry-After', String(error.retryAfter));
     const status =
-      error instanceof AuthError
+      error instanceof AuthError || error instanceof AiError
         ? error.statusCode
         : /not found|does not exist|bulunamadı|mevcut değil/i.test(message)
           ? 404

@@ -110,6 +110,8 @@ Kimlik veritabanı ayrı tutulur. Parola, her yönetici için rastgele 32 bayt s
 
 ## systemd hizmeti
 
+Kullanıcı giriş yaptıktan sonra **Ayarlar** panelinden OpenAI anahtarını ekleyebilir ve mevcut parolasıyla giriş şifresini değiştirebilir. Anahtar varsayılan `/var/lib/finance/data/ai-config.json` dosyasında finance sahibinde 600 izinle tutulur. İsterseniz `FINANCE_AI_CONFIG` ile kaynak/release ağacı dışındaki başka bir özel JSON yolu belirleyin. Anahtar eksikken elle kayıt ve rapor çalışır; AI giriş kayıt yapmaz. Model erişimini panelden test edin; yalnız dosyaya kaydetmek başarılı bağlantı anlamına gelmez. Parola değişimi bütün oturumları iptal eder.
+
 ```sh
 install -o root -g root -m 644 /opt/finance/current/deploy/finance.service /etc/systemd/system/finance.service
 systemd-analyze verify /etc/systemd/system/finance.service
@@ -174,6 +176,8 @@ Komut çalışan API'yi, farklı kaynak yolunu, farklı şemayı veya bozuk yede
 Kimlik snapshot'ı için ayrı otomatik restore komutu yoktur. Auth kurtarmasında hizmet durmalı, mevcut auth DB ve WAL/SHM durumu korunmalı, yedeğin bütünlüğü/şeması doğrulanmalı ve hedef dosya finance:finance/600 izinleriyle atomik değiştirilmelidir. Eski oturumlar yedekte bulunabilir; kurtarma sonrası admin `--reset` ile yeni parola oluşturup tüm oturumları iptal edin. Bu işlemi finans `restore-backup` komutuyla veya açık SQLite dosyalarını gelişigüzel kopyalayarak yapmayın.
 
 ## Güvenli kaynak güncellemesi
+
+AI yapılandırması kalıcı data klasöründe kaldığından release güncellemesi anahtarı korur. Finans ve kimlik SQLite snapshot'ları `ai-config.json` içermez; bu dosyayı ayrıca özel yedekleyin veya kurtarma sonrasında panelden yeniden girin. Eski finans şemasına ait snapshot, yeni şemaya doğrudan restore edilmez; kurtarmayı aynı şema sürümündeki kaynakla yapıp kontrollü güncelleyin.
 
 İlk kurulum tamamlandıktan sonra root olarak:
 

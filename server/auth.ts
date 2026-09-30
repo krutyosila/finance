@@ -226,6 +226,65 @@ export class AuthService {
   checkSessionRate(address: string) {
     this.rate(`session:${address}`, this.sessionLimit, this.sessionWindowMs);
   }
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+    token: string | undefined,
+    address: string,
+  ): Promise<void> {
+    const user = this.session(token);
+    if (!user) throw new AuthError('Devam etmek için yeniden giriş yapın.', 401);
+    if (
+      typeof currentPassword !== 'string' ||
+      Buffer.byteLength(currentPassword, 'utf8') > 1024 ||
+      typeof newPassword !== 'string' ||
+      newPassword.length < 16 ||
+      Buffer.byteLength(newPassword, 'utf8') > 1024
+    )
+      throw new AuthError(
+        'Yeni parola en az 16 karakter olmalı ve parolalar 1024 baytı aşmamalıdır.',
+        400,
+      );
+    this.rate(`password-ip:${address}`, this.loginLimit, this.loginWindowMs);
+    this.rate(`password-user:${user.email}`, this.loginLimit, this.loginWindowMs);
+    if (this.activeChecks >= 4)
+      throw new AuthError('Parola işlemleri yoğun. Biraz sonra yeniden deneyin.', 429, 1);
+    const previous = this.sqlite
+      .prepare('SELECT password_salt,password_hash FROM administrator WHERE id=1')
+      .get() as { password_salt: string; password_hash: string } | undefined;
+    if (!previous) throw new AuthError('Devam etmek için yeniden giriş yapın.', 401);
+    this.activeChecks++;
+    try {
+      if (
+        !(await verifyPassword(currentPassword, {
+          salt: previous.password_salt,
+          hash: previous.password_hash,
+        }))
+      )
+        throw new AuthError('Mevcut parola hatalı.', 401);
+      const next = await hashPassword(newPassword);
+      this.sqlite.transaction(() => {
+        const current = this.sqlite
+          .prepare('SELECT password_salt,password_hash FROM administrator WHERE id=1')
+          .get() as typeof previous;
+        if (
+          !current ||
+          current.password_hash !== previous.password_hash ||
+          current.password_salt !== previous.password_salt ||
+          this.session(token)?.email !== user.email
+        )
+          throw new AuthError('Oturum değişti. Yeniden giriş yapın.', 401);
+        this.sqlite
+          .prepare(
+            'UPDATE administrator SET password_salt=?,password_hash=?,updated_at=? WHERE id=1',
+          )
+          .run(next.salt, next.hash, this.now());
+        this.sqlite.prepare('DELETE FROM sessions').run();
+      })();
+    } finally {
+      this.activeChecks--;
+    }
+  }
   async login(
     address: string,
     password: string,

@@ -4,12 +4,17 @@ import { FinanceService } from './core/service';
 import { PROJECT_ROOT } from './core/database';
 import type { TransactionFilter } from '../shared/types';
 import { backupDatabase, exportFinancialState, restoreDatabase } from './maintenance';
+import { randomUUID } from 'node:crypto';
+import { AiSettingsService } from './ai/settings';
+import { OpenAiInterpreter, type AiInterpreter } from './ai/client';
+import { AiEntryService } from './ai/entry';
 
 interface CliOptions {
   service?: FinanceService;
   databasePath?: string;
   stdout?: (text: string) => void;
   stderr?: (text: string) => void;
+  aiInterpreter?: AiInterpreter;
 }
 interface Arguments {
   positionals: string[];
@@ -34,6 +39,7 @@ function parseArguments(args: string[]): Arguments {
     'start',
     'end',
     'entity-id',
+    'request-id',
   ]);
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
@@ -105,7 +111,7 @@ const help = {
     'backup | restore-backup PATH | export',
   ],
   options:
-    '--json temiz JSON üretir; belirsiz ekleme kayıt yapmadan 2, hatalar 1 çıkış kodu döndürür.',
+    '--json temiz JSON üretir; doğal dil add/parse OpenAI ayarı gerektirir. --request-id ID tekrar eklemeyi önler; belirsiz ekleme kayıt yapmadan 2, hatalar 1 çıkış kodu döndürür.',
 };
 
 export async function runCli(args: string[], options: CliOptions = {}): Promise<number> {
@@ -144,6 +150,12 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
       ownsService = true;
     }
     const finance = service;
+    const ai = () =>
+      new AiEntryService(
+        finance,
+        options.aiInterpreter ??
+          new OpenAiInterpreter(new AiSettingsService({ databasePath: finance.databasePath })),
+      );
     const period = {
       from: stringFlag(flags, 'from'),
       to: stringFlag(flags, 'to'),
@@ -155,14 +167,15 @@ export async function runCli(args: string[], options: CliOptions = {}): Promise<
       if (flags.data || flags['json-input'])
         result = finance.createTransaction(input(flags) as never);
       else {
-        const entry = finance.addText(
+        const entry = await ai().addText(
           required(parsed.positionals.slice(1).join(' '), 'Tırnak içinde işlem metni'),
+          stringFlag(flags, 'request-id') ?? randomUUID(),
         );
         print(entry);
         return entry.saved ? 0 : 2;
       }
     } else if (command === 'parse')
-      result = finance.parse(
+      result = await ai().interpret(
         required(parsed.positionals.slice(1).join(' '), 'Tırnak içinde işlem metni'),
       );
     else if (['context', 'status', 'report'].includes(command)) result = finance.getContext(period);
