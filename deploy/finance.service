@@ -1,0 +1,41 @@
+[Unit]
+Description=Still Finance yerel API ve web uygulamasi
+After=network.target
+
+[Service]
+Type=simple
+User=finance
+Group=finance
+WorkingDirectory=/opt/finance/current
+Environment=NODE_ENV=production
+Environment=FINANCE_PORT=4317
+Environment=PATH=/opt/finance/runtime/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=/etc/finance/finance.env
+ExecStart=/opt/finance/runtime/node/bin/node --import tsx server/index.ts
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+KillSignal=SIGTERM
+KillMode=mixed
+UMask=0077
+StateDirectory=finance
+StateDirectoryMode=0700
+ReadWritePaths=/var/lib/finance
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+CapabilityBoundingSet=
+AmbientCapabilities=
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

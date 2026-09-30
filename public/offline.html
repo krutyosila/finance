@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <meta name="theme-color" content="#122331" />
+    <title>Bağlantı gerekli — Still</title>
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: #f5f7f9;
+        color: #223441;
+        font-family: system-ui, sans-serif;
+      }
+      main {
+        max-width: 420px;
+        width: 100%;
+        padding: 38px;
+        background: white;
+        border: 1px solid #e7ecef;
+        border-radius: 18px;
+      }
+      img {
+        width: 54px;
+        height: 54px;
+        border-radius: 12px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        font-size: 25px;
+        letter-spacing: -0.7px;
+        margin: 0 0 14px;
+      }
+      p {
+        font-size: 14px;
+        line-height: 1.8;
+        color: #667b88;
+        margin: 0 0 24px;
+      }
+      .retry {
+        display: inline-block;
+        background: #277e78;
+        color: white;
+        padding: 13px 18px;
+        min-height: 44px;
+        border: 0;
+        border-radius: 8px;
+        font: inherit;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .retry:focus-visible {
+        outline: 3px solid #5888ba;
+        outline-offset: 4px;
+      }
+      small {
+        display: block;
+        margin-top: 22px;
+        font-size: 12px;
+        line-height: 1.7;
+        color: #667b88;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <img src="/icons/icon-192.png" alt="Still" />
+      <h1>Bağlantı gerekli.</h1>
+      <p>
+        Finansal kayıtlarınızı açmak ve yeni işlem kaydetmek için sunucuya bağlantı gerekir.
+        Bağlantınız geldiğinde yeniden deneyin.
+      </p>
+      <a class="retry" href="/">Yeniden dene</a>
+      <small
+        >Bu uygulama finansal verileri çevrimdışı saklamaz ve bekleyen işlem kuyruğu
+        oluşturmaz.</small
+      >
+    </main>
+  </body>
+</html>
