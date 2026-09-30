@@ -74,7 +74,7 @@ chown -R finance-build:finance-build "$finance_first_release"
 cd "$finance_first_release"
 runuser -u finance-build -- env PATH=/opt/finance/runtime/node/bin:/usr/bin:/bin NODE_ENV=development /opt/finance/runtime/node/bin/npm ci --include=dev --cache /var/cache/finance-build/npm
 runuser -u finance-build -- env PATH=/opt/finance/runtime/node/bin:/usr/bin:/bin NODE_ENV=development /opt/finance/runtime/node/bin/npm test
-runuser -u finance-build -- env PATH=/opt/finance/runtime/node/bin:/usr/bin:/bin NODE_ENV=development /opt/finance/runtime/node/bin/npm run build
+runuser -u finance-build -- env PATH=/opt/finance/runtime/node/bin:/usr/bin:/bin NODE_ENV=production /opt/finance/runtime/node/bin/npm run build
 chown -R root:finance "$finance_first_release"
 chmod -R g+rX,o-rwx "$finance_first_release"
 ln -s "$finance_first_release" /opt/finance/current
