@@ -55,6 +55,112 @@ const subscription = {
   },
 };
 describe('universal AI provider plans', () => {
+  it('transports a currency-account chain with separate income, FX proceeds and onward transfer', async () => {
+    const usd = {
+      ...account,
+      key: 'paribu_usd',
+      data: {
+        ...account.data,
+        name: 'Paribu',
+        type: 'WALLET',
+        currency: 'USD',
+        openingBalance: null,
+      },
+    };
+    const lira = { ...usd, key: 'paribu_try', data: { ...usd.data, currency: 'TRY' } };
+    const deposit = {
+      key: 'deposit',
+      kind: 'transaction',
+      data: {
+        type: 'INCOME',
+        amount: '2500',
+        currency: 'USD',
+        description: 'Para gelişi',
+        accountId: '@paribu_usd',
+        timestamp: null,
+        category: null,
+        destinationAccountId: null,
+        destinationAmount: null,
+        debtId: null,
+        amountTRY: null,
+        exchangeRate: null,
+        counterparty: null,
+        paymentMethod: null,
+        notes: null,
+        scope: 'PERSONAL',
+        debtComponent: null,
+        obligationId: null,
+        subscriptionId: null,
+      },
+    };
+    const fx = {
+      ...deposit,
+      key: 'fx',
+      data: {
+        ...deposit.data,
+        type: 'TRANSFER',
+        description: 'Döviz çevrimi',
+        destinationAccountId: '@paribu_try',
+        destinationAmount: '100000',
+      },
+    };
+    const transfer = {
+      ...fx,
+      key: 'transfer',
+      data: {
+        ...fx.data,
+        amount: '90000',
+        currency: 'TRY',
+        description: 'VakıfBank aktarımı',
+        accountId: '@paribu_try',
+        destinationAccountId: 'vakif-existing',
+        destinationAmount: null,
+      },
+    };
+    const { model, fetcher } = client({
+      certain: true,
+      issues: [],
+      items: [usd, lira, deposit, fx, transfer],
+    });
+    const result = await model.interpretPlan(
+      "Paribu'ya 2500 dolar geldi. 100000 TL'ye çevirdim, 90000 TL'sini VakıfBank'a attım.",
+      {
+        accounts: [{ id: 'vakif-existing', name: 'VakıfBank', type: 'BANK', currency: 'TRY' }],
+        debts: [],
+        date: '2026-10-01',
+        timeZone: 'Europe/Istanbul',
+      },
+    );
+    expect(result.items.map((item) => item.key)).toEqual([
+      'paribu_usd',
+      'paribu_try',
+      'deposit',
+      'fx',
+      'transfer',
+    ]);
+    expect(result.items[0].data).toEqual({ name: 'Paribu', type: 'WALLET', currency: 'USD' });
+    expect(result.items[3]).toMatchObject({
+      kind: 'transaction',
+      data: {
+        type: 'TRANSFER',
+        amount: '2500',
+        currency: 'USD',
+        destinationAccountId: '@paribu_try',
+        destinationAmount: '100000',
+      },
+    });
+    expect(result.items[4]).toMatchObject({
+      data: { accountId: '@paribu_try', destinationAccountId: 'vakif-existing', amount: '90000' },
+    });
+    const body = JSON.parse(
+      String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body),
+    );
+    expect(body.input[0].content).toContain('vakif-existing');
+    expect(body.store).toBe(false);
+    expect(body.instructions).toMatch(/bulunmuyorsa[^\n]*yeni account oluştur/);
+    expect(body.instructions).toContain('openingBalance=null');
+    expect(body.instructions).toContain('Sonraki transfer tutarını çevrim toplamı olarak kullanma');
+  });
   it('interprets multiple typed records with strict output and strips missing optional fields', async () => {
     const { model, fetcher } = client({
       certain: true,

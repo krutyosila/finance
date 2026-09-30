@@ -45,10 +45,79 @@ describe('AI plan presentation', () => {
     ]));
   it('shows money, translated fields and both new and existing links without identifiers', () => {
     const view = describeAiItem(plan.items[1], plan, context);
-    expect(view.fields).toContainEqual(['Hesap', 'Yeni banka (yeni)']);
+    expect(view.fields).toContainEqual(['Hesap', 'Yeni banka TL (yeni)']);
     expect(view.fields).toContainEqual(['Hedef hesap', 'Maaş hesabı']);
     expect(view.fields).toContainEqual(['Tutar', '₺1.200,00']);
     expect(view.fields).toContainEqual(['Kapsam', 'İş']);
+  });
+  it('distinguishes new accounts and conversion links by currency', () => {
+    const chain: AiPlan = {
+      ...plan,
+      items: [
+        { key: 'usd', kind: 'account', data: { name: 'Paribu', currency: 'USD' } },
+        { key: 'try', kind: 'account', data: { name: 'Paribu', currency: 'TRY' } },
+        {
+          key: 'conversion',
+          kind: 'transaction',
+          data: { accountId: '@usd', destinationAccountId: '@try' },
+        },
+      ],
+    };
+    expect(describeAiItem(chain.items[0], chain, context).title).toBe('Paribu USD');
+    expect(describeAiItem(chain.items[1], chain, context).title).toBe('Paribu TL');
+    const fields = describeAiItem(chain.items[2], chain, context).fields;
+    expect(fields).toContainEqual(['Hesap', 'Paribu USD (yeni)']);
+    expect(fields).toContainEqual(['Hedef hesap', 'Paribu TL (yeni)']);
+  });
+  it('distinguishes existing source and destination accounts by currency', () => {
+    const existing = {
+      ...context,
+      accounts: [
+        { id: 'paribu-usd', name: 'Paribu', currency: 'USD' },
+        { id: 'paribu-try', name: 'Paribu', currency: 'TRY' },
+      ],
+    } as FinancialContext;
+    const fields = describeAiItem(
+      {
+        key: 'conversion',
+        kind: 'transaction',
+        data: { accountId: 'paribu-usd', destinationAccountId: 'paribu-try' },
+      },
+      plan,
+      existing,
+    ).fields;
+    expect(fields).toContainEqual(['Hesap', 'Paribu USD']);
+    expect(fields).toContainEqual(['Hedef hesap', 'Paribu TL']);
+  });
+  it.each(['EUR', 'USDT'] as const)('shows %s in account titles and local links', (currency) => {
+    const account = { key: 'wallet', kind: 'account' as const, data: { name: 'Cüzdan', currency } };
+    const linkedPlan = { ...plan, items: [account] };
+    expect(describeAiItem(account, linkedPlan, context).title).toBe(`Cüzdan ${currency}`);
+    expect(
+      describeAiItem(
+        { key: 'income', kind: 'transaction', data: { accountId: '@wallet' } },
+        linkedPlan,
+        context,
+      ).fields,
+    ).toContainEqual(['Hesap', `Cüzdan ${currency} (yeni)`]);
+  });
+  it('keeps account names without a known currency and non-account titles unchanged', () => {
+    const account = { key: 'wallet', kind: 'account' as const, data: { name: 'Cüzdan' } };
+    const linkedPlan = { ...plan, items: [account] };
+    expect(describeAiItem(account, linkedPlan, context).title).toBe('Cüzdan');
+    expect(
+      describeAiItem(
+        { key: 'income', kind: 'transaction', data: { accountId: '@wallet' } },
+        linkedPlan,
+        context,
+      ).fields,
+    ).toContainEqual(['Hesap', 'Cüzdan (yeni)']);
+    for (const kind of ['debt', 'obligation'] as const) {
+      expect(
+        describeAiItem({ key: kind, kind, data: { name: 'Ödeme', currency: 'USD' } }, plan, context)
+          .title,
+      ).toBe('Ödeme');
+    }
   });
   it('explains the debt generated alongside a credit account', () => {
     const item = {

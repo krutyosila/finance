@@ -62,6 +62,16 @@ const accountValidator = z.object({
   currentDebt: nullable,
   notes: z.string().optional(),
 });
+export function validateAccountInput(input: unknown) {
+  const p = accountValidator.parse(input),
+    isLiability = p.type === 'CREDIT_CARD' || p.type === 'OVERDRAFT',
+    opening = minor(p.openingBalance ?? '0', !isLiability),
+    debtOpening = p.currentDebt == null ? opening : minor(p.currentDebt),
+    creditLimit = p.creditLimit == null ? null : minor(p.creditLimit);
+  if (!isLiability && p.currentDebt != null && debtOpening !== 0)
+    throw new Error('Güncel borç yalnızca kredi kartı ve KMH hesaplarında kullanılabilir');
+  return { p, isLiability, opening, debtOpening, creditLimit };
+}
 const debtValidator = z.object({
   name,
   type: z.enum(DEBT_TYPES),
@@ -737,14 +747,9 @@ export class FinanceService {
   }
   createAccount(input: AccountInput): Account {
     return this.atomic(() => {
-      const p = accountValidator.parse(input),
+      const { p, isLiability, opening, debtOpening, creditLimit } = validateAccountInput(input),
         id = randomUUID(),
-        date = now(),
-        isLiability = p.type === 'CREDIT_CARD' || p.type === 'OVERDRAFT';
-      const opening = minor(p.openingBalance ?? '0', !isLiability),
-        debtOpening = p.currentDebt == null ? opening : minor(p.currentDebt);
-      if (!isLiability && p.currentDebt != null && minor(p.currentDebt) !== 0)
-        throw new Error('Güncel borç yalnızca kredi kartı ve KMH hesaplarında kullanılabilir');
+        date = now();
       const row: schema.AccountRow = {
         id,
         name: p.name,
@@ -752,7 +757,7 @@ export class FinanceService {
         type: p.type,
         currency: p.currency,
         openingMinor: isLiability ? 0 : opening,
-        creditLimitMinor: p.creditLimit == null ? null : minor(p.creditLimit),
+        creditLimitMinor: creditLimit,
         notes: p.notes ?? null,
         createdAt: date,
         updatedAt: date,

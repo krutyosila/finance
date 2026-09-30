@@ -59,7 +59,7 @@ export function QuickEntry({
             id={compact ? 'quick-text-modal' : 'quick-text'}
             value={text}
             onChange={(event) => setText(event.target.value)}
-            placeholder="Banka hesabımda 25.000 TL var. Bugün 1.200 TL market harcaması yaptım. Kira her ay 8.000 TL."
+            placeholder="Paribu'ya 2500 USD geldi; 100000 TL'ye çevirdim; 90000 TL'yi VakıfBank'a aktardım."
             autoComplete="off"
             autoFocus={compact}
             maxLength={12000}
@@ -75,7 +75,10 @@ export function QuickEntry({
           </Button>
         </div>
         <div className="quick-foot">
-          <p>Hesap, borç, işlem ve ödemeleri birlikte yazın. Önce kontrol edin, sonra onaylayın.</p>
+          <p>
+            Eksik hesaplar önerilir; dönüşüm tutarı eksikse sorulur. Önce kontrol edin, sonra
+            onaylayın.
+          </p>
           <span>{text.length.toLocaleString('tr-TR')} / 12.000 karakter</span>
         </div>
       </form>

@@ -78,12 +78,21 @@ function itemName(item: AiRecordDraft) {
       (item.kind === 'cycle' ? 'Finans dönemi' : aiKindNames[item.kind]),
   );
 }
+function accountName(name: string, currency: unknown) {
+  if (currency === 'TRY') return `${name} TL`;
+  if (currency === 'USD' || currency === 'EUR' || currency === 'USDT') return `${name} ${currency}`;
+  return name;
+}
 function relation(value: string, field: string, plan: AiPlan, context: FinancialContext) {
+  const accountLink = field === 'accountId' || field === 'destinationAccountId';
   if (value.startsWith('@')) {
     const linked = plan.items.find((item) => item.key === value.slice(1));
-    return linked
-      ? `${itemName(linked)}${field === 'debtId' && linked.kind === 'account' ? ' borcu' : ''} (yeni)`
-      : 'Bağlantı bulunamadı; ek bilgi gerekli';
+    if (!linked) return 'Bağlantı bulunamadı; ek bilgi gerekli';
+    const name =
+      accountLink && linked.kind === 'account'
+        ? accountName(itemName(linked), linked.data.currency)
+        : itemName(linked);
+    return `${name}${field === 'debtId' && linked.kind === 'account' ? ' borcu' : ''} (yeni)`;
   }
   const records =
     field === 'debtId'
@@ -94,11 +103,9 @@ function relation(value: string, field: string, plan: AiPlan, context: Financial
           ? context.subscriptions
           : context.accounts;
   const record = records.find((record) => record.id === value);
-  return record
-    ? 'service' in record
-      ? record.service
-      : record.name
-    : 'Bağlantı bulunamadı; ek bilgi gerekli';
+  if (!record) return 'Bağlantı bulunamadı; ek bilgi gerekli';
+  const name = 'service' in record ? record.service : record.name;
+  return accountLink && 'currency' in record ? accountName(name, record.currency) : name;
 }
 export function describeAiItem(item: AiRecordDraft, plan: AiPlan, context: FinancialContext) {
   const data = item.data as Record<string, unknown>;
@@ -166,5 +173,7 @@ export function describeAiItem(item: AiRecordDraft, plan: AiPlan, context: Finan
     item.kind === 'account' && ['CREDIT_CARD', 'OVERDRAFT'].includes(String(data.type))
       ? 'Bu hesapla birlikte aynı ad ve para biriminde bağlı borç kaydı da oluşturulur. Mevcut borç başlangıç borcu olarak kullanılır.'
       : undefined;
-  return { title: itemName(item), kind: aiKindNames[item.kind], fields, note };
+  const title =
+    item.kind === 'account' ? accountName(itemName(item), data.currency) : itemName(item);
+  return { title, kind: aiKindNames[item.kind], fields, note };
 }

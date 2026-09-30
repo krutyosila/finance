@@ -17,6 +17,7 @@ import { AiError } from './errors';
 import { AuthError } from '../auth';
 
 import { PLAN_FIELDS } from './plan-schema';
+import { prepareAccountChain } from './account-chain';
 const kindLabels: Record<AiRecordKind, string> = {
   transaction: 'İşlem',
   account: 'Hesap',
@@ -207,7 +208,7 @@ export class AiPlanService {
       ...(await this.interpreter.interpretPlan(value.trim(), this.references())),
       text: value.trim(),
     });
-    plan = this.scheduleDefaults(plan);
+    plan = prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts());
     if (!plan.certain || plan.issues.length) return { ...plan, certain: false };
     try {
       this.finance.sqlite.transaction(() => {
@@ -244,7 +245,10 @@ export class AiPlanService {
               throw new AiError('Bu istek kimliği farklı bir plan için kullanılmış.', 409);
             return JSON.parse(row.result_json) as AiPlanResult;
           }
-          confirmation = this.scheduleDefaults(plan);
+          confirmation = prepareAccountChain(
+            this.scheduleDefaults(plan),
+            this.finance.listAccounts(),
+          );
           if (!confirmation.certain || confirmation.issues.length)
             return { saved: false, confirmation: { ...confirmation, certain: false } };
           const result: AiPlanResult = {
@@ -266,6 +270,7 @@ export class AiPlanService {
   }
   private execute(plan: AiPlan): { key: string; kind: AiRecordKind; id: string }[] {
     if (!plan.items.length) throw Error('Plan en az bir kayıt içermelidir.');
+    const defaultTimestamp = this.finance.normalizeTransactionTimestamp();
     const pending = plan.items
         .map((item) =>
           item.kind === 'transaction'
@@ -273,7 +278,9 @@ export class AiPlanService {
                 ...item,
                 data: {
                   ...item.data,
-                  timestamp: this.finance.normalizeTransactionTimestamp(item.data.timestamp),
+                  timestamp: this.finance.normalizeTransactionTimestamp(
+                    item.data.timestamp ?? defaultTimestamp,
+                  ),
                 },
               }
             : item,
