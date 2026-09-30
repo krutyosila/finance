@@ -21,7 +21,7 @@ Başarılı istek JSON döndürür. Oluşturma HTTP 201; okuma, düzenleme ve si
 | POST   | `/api/auth/logout`   | Mevcut oturumu iptal eder; sunucu modunda giriş gerekir                      |
 | POST   | `/api/auth/password` | `{ "currentPassword": "...", "newPassword": "..." }` → `{ "changed": true }` |
 
-Parola değişimi mevcut yetkili oturumu ve mevcut parolayı gerektirir; yeni parola en az 16 karakterdir. Başarıda tüm oturumlar iptal edilir ve güvenli çerez temizlenir. Yerel modda bu uç 403 döndürür. Logout tekrarlanabilir; geçersiz oturum için de çerezi temizler.
+Parola değişimi mevcut yetkili oturumu ve mevcut parolayı gerektirir; yeni parola en az 8 karakterdir. Başarıda tüm oturumlar iptal edilir ve güvenli çerez temizlenir. Yerel modda bu uç 403 döndürür. Logout tekrarlanabilir; geçersiz oturum için de çerezi temizler.
 
 Yanıt biçimi `{ "required": true, "authenticated": true, "user": { "email": "admin@example.com", "role": "ADMIN" } }` olur. Giriş yoksa `authenticated: false`, `user: null` döner. Yerel modda `required: false` olur. Kullanıcı kaydı veya API token oluşturma ucu yoktur; yönetici [sunucuda parola dosyasıyla](DEPLOYMENT.md) oluşturulur.
 

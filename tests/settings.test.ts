@@ -399,7 +399,7 @@ describe('ayar uçları', () => {
     const changed = await request(
       '/api/auth/password',
       'POST',
-      { currentPassword: OLD_PASSWORD, newPassword: NEW_PASSWORD },
+      { currentPassword: OLD_PASSWORD, newPassword: 'Next123!' },
       `${SESSION_COOKIE}=${login.token}`,
     );
     expect(changed.status).toBe(200);

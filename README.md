@@ -32,7 +32,7 @@ Veritabanı bu proje içindeki **`data/finance.sqlite`** dosyasıdır. SQLite ç
 
 `FINANCE_PUBLIC_URL` tanımlanmadığında yerel mod kullanılır; tarayıcıdan parola istenmez ve API yalnızca loopback'e bağlanır. Bu değişken `https://finance.example.com` gibi bir HTTPS kaynağına ayarlanırsa finans uçları yönetici oturumu gerektirir. Kayıt olma ve açık hesap oluşturma yoktur. Nginx/Hestia HTTPS trafiğini içerideki `127.0.0.1:4317` API'sine taşır; Node.js halka açık bir adrese bağlanmaz.
 
-Hedef yönetici e-postası **admin@example.com**. Yönetici oluşturmak veya parolayı sıfırlamak için parolayı komut satırına/ortam örneğine yazmayın. Yalnızca sahibi tarafından okunabilen, komutu çalıştıran kullanıcıya ait tek satırlı bir parola dosyası kullanın; parola en az 16 karakter olmalıdır:
+Hedef yönetici e-postası **admin@example.com**. Yönetici oluşturmak veya parolayı sıfırlamak için parolayı komut satırına/ortam örneğine yazmayın. Yalnızca sahibi tarafından okunabilen, komutu çalıştıran kullanıcıya ait tek satırlı bir parola dosyası kullanın; parola en az 8 karakter olmalıdır:
 
 ```sh
 chmod 600 /özel/yol/admin-parola.txt
@@ -52,7 +52,7 @@ HTTPS uygulamasını bir PWA olarak yükleyebilirsiniz. Destekleyen tarayıcıda
 
 ## Hızlı kayıt
 
-**Ayarlar → OpenAI bağlantısı** bölümünde anahtarınızı ekleyin, modeli seçin ve **Bağlantıyı test et** düğmesiyle erişimi doğrulayın. Başlangıç modeli `gpt-5.4-mini`; seçtiğiniz model Responses API ve Structured Outputs desteklemelidir. Test anahtar/model erişimini kontrol eder; yorumlama veya kota garantisi vermez. Anahtar giriş kutusu tekrar doldurulmaz ve API anahtarı tarayıcıya geri verilmez. Boş bırakarak yalnız modeli değiştirebilirsiniz. **Ayarlar → Giriş şifresi** bölümünde mevcut parolanızı doğrulayarak en az 16 karakterli yeni parola belirleyebilirsiniz; bütün oturumlar kapanır.
+**Ayarlar → OpenAI bağlantısı** bölümünde anahtarınızı ekleyin, modeli seçin ve **Bağlantıyı test et** düğmesiyle erişimi doğrulayın. Model menüsünde **GPT-5.4 Mini** (varsayılan `gpt-5.4-mini`), **GPT-5.4 Nano** ve **GPT-5.4** seçenekleri bulunur. **Diğer model** ile özel bir model adı girebilirsiniz; kayıtlı özel adlar korunur. Bu menü tüm erişilebilir modellerin listesi değildir. Seçtiğiniz model hesabınızda erişilebilir olmalı, Responses API ve Structured Outputs desteklemelidir. Seçim yalnız **Ayarları kaydet** ile uygulanır. Test anahtar/model erişimini kontrol eder; yorumlama veya kota garantisi vermez. Anahtar giriş kutusu tekrar doldurulmaz ve API anahtarı tarayıcıya geri verilmez. Boş bırakarak yalnız modeli değiştirebilirsiniz. **Ayarlar → Giriş şifresi** bölümünde mevcut parolanızı doğrulayarak en az 8 karakterli yeni parola belirleyebilirsiniz; bütün oturumlar kapanır.
 
 **Ne oldu?** alanına Türkçe finans metni yazın veya CLI kullanın:
 

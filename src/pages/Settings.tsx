@@ -11,6 +11,16 @@ interface AiSettings {
   model: string;
 }
 
+const modelPresets = [
+  { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini (varsayılan)' },
+  { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano' },
+  { value: 'gpt-5.4', label: 'GPT-5.4' },
+] as const;
+
+function choiceForModel(model: string) {
+  return modelPresets.some((preset) => preset.value === model) ? model : 'custom';
+}
+
 export function Settings() {
   const settings = useResource<AiSettings>('/settings/ai');
   const { session } = useAuth();
@@ -45,6 +55,10 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
   const { online } = usePwa();
   const [connection, setConnection] = useState(initial);
   const [model, setModel] = useState(initial.model);
+  const [modelChoice, setModelChoice] = useState(() => choiceForModel(initial.model));
+  const [customModel, setCustomModel] = useState(() =>
+    choiceForModel(initial.model) === 'custom' ? initial.model : '',
+  );
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState<'save' | 'test' | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -59,6 +73,10 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
   async function save(event: React.FormEvent) {
     event.preventDefault();
     if (busy) return;
+    if (!model.trim()) {
+      setError('Kaydetmeden önce bir model adı girin.');
+      return;
+    }
     setBusy('save');
     setError('');
     setMessage('');
@@ -69,6 +87,8 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
       });
       setConnection(value);
       setModel(value.model);
+      setModelChoice(choiceForModel(value.model));
+      if (choiceForModel(value.model) === 'custom') setCustomModel(value.model);
       setApiKey('');
       setConfirmed(false);
       setMessage(
@@ -137,20 +157,43 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
         <Field label="Sağlayıcı">
           <input value="OpenAI" readOnly />
         </Field>
-        <Field label="Model" hint="OpenAI hesabınızda erişiminiz olan model adını kullanın.">
-          <input
-            value={model}
+        <Field label="Model" hint="Seçtiğiniz modelin hesabınızda erişilebilir olması gerekir.">
+          <select
+            value={modelChoice}
             onChange={(event) => {
-              setModel(event.target.value);
+              const choice = event.target.value;
+              setModelChoice(choice);
+              setModel(choice === 'custom' ? customModel : choice);
               clearFeedback();
             }}
-            autoComplete="off"
-            spellCheck={false}
             required
-            maxLength={200}
             disabled={!!busy}
-          />
+          >
+            {modelPresets.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+            <option value="custom">Diğer model</option>
+          </select>
         </Field>
+        {modelChoice === 'custom' && (
+          <Field label="Model adı">
+            <input
+              value={customModel}
+              onChange={(event) => {
+                setCustomModel(event.target.value);
+                setModel(event.target.value);
+                clearFeedback();
+              }}
+              autoComplete="off"
+              spellCheck={false}
+              required
+              maxLength={200}
+              disabled={!!busy}
+            />
+          </Field>
+        )}
         <Field
           label="API anahtarı"
           hint={
@@ -264,7 +307,7 @@ function PasswordForm() {
             autoComplete="current-password"
             value={currentPassword}
             onChange={(event) => setCurrentPassword(event.target.value)}
-            minLength={16}
+            minLength={8}
             maxLength={1024}
             required
             disabled={busy}
@@ -272,14 +315,14 @@ function PasswordForm() {
         </Field>
         <Field
           label="Yeni parola"
-          hint="En az 16 karakter kullanın. Parola yöneticinizin önerdiği güçlü bir parola seçebilirsiniz."
+          hint="En az 8 karakter kullanın. Parola yöneticinizin önerdiği güçlü bir parola seçebilirsiniz."
         >
           <input
             type="password"
             autoComplete="new-password"
             value={newPassword}
             onChange={(event) => setNewPassword(event.target.value)}
-            minLength={16}
+            minLength={8}
             maxLength={1024}
             required
             disabled={busy}
@@ -291,7 +334,7 @@ function PasswordForm() {
             autoComplete="new-password"
             value={confirmation}
             onChange={(event) => setConfirmation(event.target.value)}
-            minLength={16}
+            minLength={8}
             maxLength={1024}
             required
             disabled={busy}

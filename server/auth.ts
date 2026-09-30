@@ -64,10 +64,10 @@ function derive(password: string, salt: string): Promise<Buffer> {
 export async function hashPassword(password: string): Promise<PasswordHash> {
   if (
     typeof password !== 'string' ||
-    password.length < 16 ||
+    password.length < 8 ||
     Buffer.byteLength(password, 'utf8') > 1024
   )
-    throw new Error('Parola en az 16 karakter olmalı ve 1024 baytı aşmamalıdır.');
+    throw new Error('Parola en az 8 karakter olmalı ve 1024 baytı aşmamalıdır.');
   const salt = randomBytes(32).toString('hex'),
     hash = (await derive(password, salt)).toString('hex');
   return { salt, hash };
@@ -238,11 +238,11 @@ export class AuthService {
       typeof currentPassword !== 'string' ||
       Buffer.byteLength(currentPassword, 'utf8') > 1024 ||
       typeof newPassword !== 'string' ||
-      newPassword.length < 16 ||
+      newPassword.length < 8 ||
       Buffer.byteLength(newPassword, 'utf8') > 1024
     )
       throw new AuthError(
-        'Yeni parola en az 16 karakter olmalı ve parolalar 1024 baytı aşmamalıdır.',
+        'Yeni parola en az 8 karakter olmalı ve parolalar 1024 baytı aşmamalıdır.',
         400,
       );
     this.rate(`password-ip:${address}`, this.loginLimit, this.loginWindowMs);

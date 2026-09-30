@@ -10,9 +10,9 @@ Model serbest komut çalıştıramaz; yalnızca izinli JSON işlem alanlarını 
 
 ## Ayarlar
 
-Yalnız mevcut yetkili kullanıcı OpenAI anahtarını ve model adını yönetir. Başlangıç modeli gpt-5.4-mini; model değiştirilebilir. Anahtar kaynak ağacı dışındaki özel 600 izinli yapılandırma dosyasında saklanır; GET yalnız configured ve model döndürür. Anahtar veya sağlayıcı hata gövdesi günlük/yanıtlarda görünmez. Bağlantı testi model erişimini kontrol eder ve finans kaydı oluşturmaz.
+Yalnız mevcut yetkili kullanıcı OpenAI anahtarını ve model adını yönetir. Model menüsü GPT-5.4 Mini (varsayılan gpt-5.4-mini), GPT-5.4 Nano (gpt-5.4-nano) ve GPT-5.4 seçeneklerini sunar. Diğer model seçimi özel bir model adı girmeye izin verir; kayıtlı özel model başlangıçta aynen gösterilir ve seçenekler arasında geçişte korunur. Liste statik önerilerdir; tüm erişilebilir modelleri listelediği iddia edilmez. Değişiklik yalnız kaydetme ile uygulanır; boş API anahtarı kayıtlı anahtarı korur. Anahtar kaynak ağacı dışındaki özel 600 izinli yapılandırma dosyasında saklanır; GET yalnız configured ve model döndürür. Anahtar veya sağlayıcı hata gövdesi günlük/yanıtlarda görünmez. Bağlantı testi kaydedilmiş model erişimini kontrol eder ve finans kaydı oluşturmaz.
 
-Sunucu modunda mevcut parola doğrulanarak en az 16 karakterli yeni parola belirlenir; bütün oturumlar iptal edilir ve güvenli cookie temizlenir. Yerel modda parola bölümü kullanılmaz. HTTPS, mevcut origin kontrolü, oturum koruması ve finans verilerinin önbellekten dışlanması korunur.
+Sunucu modunda mevcut parola doğrulanarak en az 8 karakterli yeni parola belirlenir; bütün oturumlar iptal edilir ve güvenli cookie temizlenir. Yerel modda parola bölümü kullanılmaz. HTTPS, mevcut origin kontrolü, oturum koruması ve finans verilerinin önbellekten dışlanması korunur.
 
 ## Doğrulama ve yayın
 

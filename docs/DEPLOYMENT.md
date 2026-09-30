@@ -91,7 +91,7 @@ runuser -u finance -- env PATH=/opt/finance/runtime/node/bin:/usr/bin:/bin FINAN
 
 ## Yönetici oluşturma ve sıfırlama
 
-Yönetici e-postası `admin@example.com`. Kayıt olma ucu yoktur. En az 16 karakterli parolayı güvenli parola yöneticisinde oluşturun ve yalnızca sahibinin okuyabildiği tek satırlı geçici dosyaya aktarın. Parolayı shell argümanı, Git dosyası, `.env`, günlük veya GitHub secret olarak kullanmayın.
+Yönetici e-postası `admin@example.com`. Kayıt olma ucu yoktur. En az 8 karakterli parolayı güvenli parola yöneticisinde oluşturun ve yalnızca sahibinin okuyabildiği tek satırlı geçici dosyaya aktarın. Parolayı shell argümanı, Git dosyası, `.env`, günlük veya GitHub secret olarak kullanmayın.
 
 Parola dosyasının sahibi komutu çalıştıran kullanıcı olmalıdır. Root sahipli `/root/finance-admin-password.txt` için:
 

@@ -106,6 +106,21 @@ describe('hosted authentication source records', () => {
     expect(await verifyPassword(PASSWORD, first)).toBe(true);
     expect(await verifyPassword('wrong', first)).toBe(false);
   });
+  it('accepts eight-character passwords for provisioning and change, and rejects seven', async () => {
+    const a = auth();
+    await expect(hashPassword('Tiny12!')).rejects.toThrow();
+    await a.provisionAdmin(EMAIL, 'Test123!');
+    const first = await a.login(EMAIL, 'Test123!', 'first'),
+      second = await a.login(EMAIL, 'Test123!', 'second');
+    await expect(
+      a.changePassword('Test123!', 'Tiny12!', first.token, 'first'),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(a.session(first.token)).not.toBeNull();
+    await a.changePassword('Test123!', 'Next123!', first.token, 'first');
+    expect(a.session(first.token)).toBeNull();
+    expect(a.session(second.token)).toBeNull();
+    expect((await a.login(EMAIL, 'Next123!', 'new-login')).user.email).toBe(EMAIL);
+  });
   it('creates no administrator or session until explicitly provisioned', () => {
     const a = auth();
     expect(a.isProvisioned()).toBe(false);
