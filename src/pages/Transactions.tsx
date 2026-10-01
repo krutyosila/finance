@@ -9,6 +9,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Tag as LabelIcon,
   Trash2,
   X,
 } from 'lucide-react';
@@ -57,6 +58,7 @@ export function Transactions({
     type: '',
     currency: '',
     category: '',
+    labelId: '',
     accountId: '',
     from: '',
     to: '',
@@ -82,6 +84,10 @@ export function Transactions({
       setFilters((previous) => ({ ...previous, [key]: event.target.value }));
   const accountName = (id: string | null) =>
     context.accounts.find((account) => account.id === id)?.name || 'Hesapsız nakit';
+  const labelName = (id: string) => {
+    const label = context.labels?.find((label) => label.id === id);
+    return label ? `${label.name}${label.archived ? ' (arşivlenmiş)' : ''}` : 'Etiket bulunamadı';
+  };
   const hasFilters = Object.values(filters).some((value) => !!value) || !!search;
   return (
     <>
@@ -175,6 +181,19 @@ export function Transactions({
               />
             </label>
             <label>
+              Etiket
+              <select value={filters.labelId} onChange={change('labelId')}>
+                <option value="">Tüm etiketler</option>
+                <option value="unassigned">Etiketsiz</option>
+                {context.labels?.map((label) => (
+                  <option key={label.id} value={label.id}>
+                    {label.name}
+                    {label.archived ? ' (arşivlenmiş)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               Başlangıç
               <input type="date" value={filters.from} onChange={change('from')} />
             </label>
@@ -197,6 +216,7 @@ export function Transactions({
                   type: '',
                   currency: '',
                   category: '',
+                  labelId: '',
                   accountId: '',
                   from: '',
                   to: '',
@@ -291,6 +311,15 @@ export function Transactions({
                               {transaction.category || 'Kategorisiz'}
                               {transaction.scope === 'BUSINESS' ? ' · İş' : ''}
                             </small>
+                            {transaction.labelId && (
+                              <span
+                                className="transaction-label-badge"
+                                aria-label={`Etiket: ${labelName(transaction.labelId)}`}
+                              >
+                                <LabelIcon size={12} aria-hidden="true" />
+                                <span>{labelName(transaction.labelId)}</span>
+                              </span>
+                            )}
                           </span>
                         </button>
                       </td>

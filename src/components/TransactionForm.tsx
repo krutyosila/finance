@@ -10,6 +10,7 @@ import {
 import { api } from '../api';
 import { localDateTime, transactionTimestamp, typeNames } from '../format';
 import { ErrorMessage, Field, FormFooter } from './ui';
+import { LabelSelect } from './LabelSelect';
 
 export function TransactionForm({
   context,
@@ -37,6 +38,7 @@ export function TransactionForm({
     timestamp: localDateTime(originalInstant),
     description: seed.description || '',
     category: seed.category || '',
+    labelId: seed.labelId || '',
     accountId: seed.accountId || '',
     destinationAccountId: seed.destinationAccountId || '',
     destinationAmount: seed.destinationAmount || '',
@@ -116,6 +118,7 @@ export function TransactionForm({
       timestamp: transactionTimestamp(values.timestamp, originalInstant),
       description: values.description.trim(),
       category: values.category.trim(),
+      labelId: values.labelId || null,
       scope: values.scope as TransactionInput['scope'],
       accountId: values.accountId || null,
       destinationAccountId: movement ? values.destinationAccountId || null : null,
@@ -259,6 +262,17 @@ export function TransactionForm({
               <option key={item.category} value={item.category} />
             ))}
           </datalist>
+        </Field>
+        <Field label="Etiket" hint="Her işlem için tek etiket seçebilirsiniz; kategoriden ayrıdır.">
+          <LabelSelect
+            labels={context.labels}
+            value={values.labelId}
+            preserveArchived={!!transaction}
+            disabled={busy}
+            onChange={(labelId) =>
+              setValues((previous) => ({ ...previous, labelId: labelId || '' }))
+            }
+          />
         </Field>
         {movement && (
           <>

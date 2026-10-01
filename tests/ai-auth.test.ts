@@ -63,6 +63,14 @@ function fixture() {
         draft: { type: 'EXPENSE', amount: '450', currency: 'TRY', description: 'AI test kaydı' },
       };
     },
+    classifyLabels: async (input) => {
+      announce();
+      await gate;
+      return input.transactions.map((transaction) => ({
+        transactionId: transaction.id,
+        labelId: input.labels[0].id,
+      }));
+    },
   };
   const app = createApp(finance, {
     publicUrl: ORIGIN,
@@ -109,7 +117,77 @@ function expectNoFinancialWrites(finance: FinanceService) {
   });
 }
 
+function stableSnapshot(finance: FinanceService) {
+  const { exportedAt: _exportedAt, context, ...stored } = finance.snapshot();
+  const { generatedAt: _generatedAt, ...computed } = context;
+  return { ...stored, context: computed };
+}
+
 describe('AI beklerken oturum iptali', () => {
+  it('etiket taraması önizlemesini kayıt değiştirmeden döndürür', async () => {
+    const { app, finance, entered, release } = fixture();
+    const label = finance.createLabel({ name: 'Market' });
+    const transaction = finance.createTransaction({
+      type: 'EXPENSE',
+      amount: '12',
+      currency: 'TRY',
+      description: 'Market alışverişi',
+    });
+    const before = stableSnapshot(finance);
+    const pending = post(app, '/api/ai/labels/scan', {
+      transactions: [
+        {
+          transactionId: transaction.id,
+          transactionUpdatedAt: transaction.updatedAt,
+          previousLabelId: null,
+        },
+      ],
+    });
+    await entered;
+    release();
+    expect(await pending).toMatchObject({
+      status: 200,
+      body: {
+        suggestions: [
+          {
+            transactionId: transaction.id,
+            labelId: label.id,
+            previousLabelId: null,
+            transactionUpdatedAt: transaction.updatedAt,
+          },
+        ],
+      },
+    });
+    expect(stableSnapshot(finance)).toEqual(before);
+  });
+
+  it('çıkıştan sonra bekleyen etiket taraması önizlemesini döndürmez', async () => {
+    const { app, auth, finance, entered, release } = fixture();
+    finance.createLabel({ name: 'Market' });
+    const transaction = finance.createTransaction({
+      type: 'EXPENSE',
+      amount: '12',
+      currency: 'TRY',
+      description: 'Market alışverişi',
+    });
+    const before = stableSnapshot(finance);
+    const pending = post(app, '/api/ai/labels/scan', {
+      transactions: [
+        {
+          transactionId: transaction.id,
+          transactionUpdatedAt: transaction.updatedAt,
+          previousLabelId: null,
+        },
+      ],
+    });
+    await entered;
+    auth.logout(TOKEN);
+    release();
+    const response = await pending;
+    expect(response.status).toBe(401);
+    expect(response.body).not.toHaveProperty('suggestions');
+    expect(stableSnapshot(finance)).toEqual(before);
+  });
   it('geçerli oturumla tamamlanan açık AI işlemini kaydeder', async () => {
     const { app, finance, entered, release } = fixture();
     const pending = post(app, '/api/ai/transaction', {

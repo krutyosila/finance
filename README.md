@@ -94,7 +94,9 @@ npm run finance -- parse "24 USD domain yenilendi" --json
 
 Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Eski `add` komutunda metni OpenAI yorumlar; tek açık işlem sunucudaki muhasebe kontrollerinden geçip doğrudan kaydedilir. Belirsiz veya birden fazla ayrı işlemde CLI `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları seçerek yapılandırılmış işlem gönderin veya yeni `ai preview` akışını kullanın. Borç hareketi eşleşen mevcut veya aynı toplu planda tanımlanan borç gerektirir. Anahtar yoksa, bağlantı/biçim/kota hatasında kayıt yapılmaz; eski ayrıştırıcıya dönülmez.
 
-OpenAI'a yazdığınız not, mevcut hesap/borç adları ve kimlikleri, türleri ve para birimleri ile güncel yerel tarih gönderilir. Yeni toplu akış ayrıca abonelik/düzenli ödeme adları ve kimlikleri ile para birimlerini ve varsa açık finans döneminin adını/kimliğini gönderir. Yeni toplu akışta kalıcı kayıt kimlikleri yerine her isteğe özel kısa referanslar gönderilir; sunucu bunları aynı isteğin doğru kayıtlarına geri bağlar. Bütün işlem defteri, mevcut bakiyeler/abonelik ücretleri, e-posta ve giriş parolanız gönderilmez. İstek `store: false` kullanır; bu seçenek bütün sağlayıcı veri saklama politikalarının kapatılması anlamına gelmez. Uygulama [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) ile izinli işlem alanlarını alır. Model komut çalıştıramaz ve finans kurallarını değiştiremez.
+OpenAI'a yazdığınız not, mevcut hesap/borç adları ve kimlikleri, türleri ve para birimleri ile güncel yerel tarih gönderilir. Yeni toplu akış ayrıca abonelik/düzenli ödeme adları ve kimlikleri ile para birimlerini, varsa açık finans döneminin adını/kimliğini ve etkin etiket adları/açıklamalarını gönderir. Yeni toplu akışta kalıcı kayıt kimlikleri yerine her isteğe özel kısa referanslar gönderilir; sunucu bunları aynı isteğin doğru kayıtlarına geri bağlar. Yeni kayıt yorumlanırken işlem geçmişi, mevcut bakiyeler/abonelik ücretleri, e-posta ve giriş parolanız gönderilmez. Ayarlardaki **Tümünü tara** ayrı bir işlemdir: mevcut işlemlerin yalnız açıklama, kategori, karşı taraf ve not alanları, etiket tanımlarıyla birlikte en fazla 50 kayıtlık gruplarda değerlendirilir. Tutar, hesap, bakiye ve kalıcı kimlikler gönderilmez. İstek `store: false` kullanır; bu seçenek bütün sağlayıcı veri saklama politikalarının kapatılması anlamına gelmez. Uygulama [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs) ile izinli işlem alanlarını alır. Model komut çalıştıramaz ve finans kurallarını değiştiremez.
+
+**Ayarlar → Etiketler** bölümünde ad ve isteğe bağlı açıklama tanımlayın. Her işleme tek etiket seçilebilir; AI yalnız mevcut etkin etiketlerden önerir. Önizlemede etiketi kendiniz değiştirebilirsiniz. Arşivlenen etiket geçmiş işlemlerde korunur. **Tümünü tara**, silinmemiş tüm işlemleri yeniden değerlendirir ve önce önerileri gösterir; eşleşmeyen işlemler etiketsiz önerilir. **Tüm değişiklikleri uygula** onayından sonra yalnız etiketler değişir. Tarama hata verir veya iptal edilirse hiçbir kayıt değişmez. Tek taramada en fazla 5.000 kayıt desteklenir; limit aşılırsa kısmi tarama yapılmaz.
 
 Tarayıcı aynı planın başarısız onay isteğini yeniden gönderirken istek kimliğini korur. Sunucu başarılı kayıt sonucunu finans SQLite dosyasında atomik saklar; aynı kimlik ve not yeni işlem oluşturmaz. CLI ile kontrollü tekrar için `add "450 market" --request-id BENZERSIZ_KIMLIK` kullanın. Ayrı yeni kimlik yeni işlem anlamına gelir.
 
@@ -123,6 +125,7 @@ npm run finance -- report --from 2026-09-01 --to 2026-09-30
 npm run finance -- report --cycle-id CYCLE_ID --json
 npm run finance -- transactions --search market --currency TRY
 npm run finance -- transactions --type EXPENSE --category Market --account-id ACCOUNT_ID --scope PERSONAL
+npm run finance -- transactions --label-id LABEL_ID
 npm run finance -- transactions --from 2026-09-01 --to 2026-09-30
 npm run finance -- transactions --deleted --json
 npm run finance -- accounts
@@ -202,7 +205,7 @@ Geri yükleme; çalışan API, bozuk SQLite, farklı şema veya farklı veritaba
 npm run finance -- export
 ```
 
-**`exports/financial_snapshot.json`** ve **`exports/transactions.csv`** dosyalarını atomik olarak yazar. JSON; tüm saklanan finans kayıtlarını, silinmiş kayıtları, denetim izini ve bir AI asistanının okuyabileceği güncel hesaplanmış durumu içerir. CSV, silinmiş işlemleri de içerir. Para değerleri gerçek ondalık metin olarak korunur; elektronik tabloda formül olabilecek açıklama/kategori gibi metinler düz metin olarak kaçırılır. Bu komut önceki iki dışa aktarma dosyasını değiştirir; finans kayıtlarını değiştirmez.
+**`exports/financial_snapshot.json`** ve **`exports/transactions.csv`** dosyalarını atomik olarak yazar. JSON; tüm saklanan finans kayıtlarını, silinmiş kayıtları, etiket tanımlarını/bağlantılarını, denetim izini ve bir AI asistanının okuyabileceği güncel hesaplanmış durumu içerir. CSV, silinmiş işlemleri, etiket kimliklerini ve okunabilir etiket adlarını da içerir. Para değerleri gerçek ondalık metin olarak korunur; elektronik tabloda formül olabilecek açıklama/kategori gibi metinler düz metin olarak kaçırılır. Bu komut önceki iki dışa aktarma dosyasını değiştirir; finans kayıtlarını değiştirmez.
 
 ## API ve doğrulama
 

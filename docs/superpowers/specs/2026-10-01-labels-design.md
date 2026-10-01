@@ -1,0 +1,19 @@
+# Kullanıcı etiketleri ve AI seçimi
+
+Kullanıcı etiketlerini kendisi oluşturur; bir işlemde en fazla bir etiket bulunur. Bu seçim kullanıcı tarafından açıkça tercih edildi. Etiketler mevcut serbest kategori alanından ayrı işlem ayrıntısıdır; eski kayıtların kategorisi, para hareketi veya bakiyesi değiştirilmez.
+
+Ayarlarda etiket adı ve isteğe bağlı kısa açıklama yönetilir. Ad 1–80, açıklama en fazla 500 karakterdir. Yeni adlar boşluk ve Türkçe büyük/küçük harf açısından tekrar edemez. Etiket yeniden adlandırılırsa kimliği korunur. Arşivlenen etiket yeni seçimlerden çıkar; mevcut işlemlerde görünür kalır.
+
+İşlem formunda, işlem listesinin filtrelerinde ve AI önizlemesinde tek etiket seçilebilir; “Etiket yok” ile kaldırılabilir. AI önizlemesinde etiketin değiştirilmesi ikinci bir model çağrısı gerektirmez. Etiket yönetimi Ayarlar içinde yer alır; mevcut mobil gezinme düzeni korunur.
+
+Yeni kayıt akışında AI yalnızca yazılan notla birlikte aktif etiketlerin adını ve kullanıcı açıklamasını görür. İşlem geçmişi, toplamlar ve audit kayıtları bu akışta gönderilmez. Etiket kimlikleri ana AI plan akışında istek için oluşturulan referanslarla temsil edilir. Model etiket oluşturamaz veya listede olmayan bir etiket seçemez. Uygun açık eşleşme varsa seçer; uygun eşleşme yoksa veya belirsizse etiketi boş bırakır. İsteğe bağlı etiketin boş olması geçerli finansal kaydı engellemez. Açıkça istenen ama bulunamayan etiket için mevcut düzeltme akışı kullanılabilir. Sunucunun saptadığı geçersiz etiketler `labelIssues` içinde işlem anahtarıyla tutulur; yerel etiket düzeltmesi yalnız bu hatayı kaldırır, finansal belirsizliği kaldırmaz.
+
+Kullanıcı sonradan geçmiş işlemler için “Tümünü tara” istedi. Ayarlardaki düğme silinmemiş tüm işlemleri, mevcut etiketleri de yeniden değerlendirerek tarar. Bu ayrı akış yalnız açıklama, kategori, karşı taraf ve not alanlarını, etkin etiket adları/açıklamalarıyla birlikte modele gönderir; tutar, bakiye, hesap, tarih, önceki etiket ve kalıcı kimlikler gönderilmez. En fazla 50 işlemden oluşan gruplar sırayla değerlendirilir. 5.000 kayıt sınırı aşılırsa sessizce kısmi tarama yapılmaz. Tarama hiçbir kayıt değiştirmez. Tamamlanan öneriler gösterilir; eşleşmeyen işlemler “Etiketsiz” olur ve eski etiketin kaldırılması açıkça gösterilir. Kullanıcının uygulama onayı sonrasında yalnız etiket bağlantıları tek atomik işlemde değişir. Arada değişen/silinen işlem veya arşivlenen etiket varsa uygulama bütünüyle reddedilir ve yeniden tarama istenir. Tarama iptali veya sağlayıcı hatası kısmi yazma oluşturmaz.
+
+Veri yapısı: `labels` tablosu ve `transactions.label_id` nullable bağlantısı. Ekleme, değiştirme ve arşivleme mevcut yetkili API altında çalışır. Etiket tanımları ve bağlantıları snapshot/CSV aktarımında korunur. AI planı yorumlanırken ve onaylanırken etiket tekrar doğrulanır; bu arada arşivlenmiş veya uydurulmuş bir kimlik sessizce kaydedilmez.
+
+Düzenli ödeme ve abonelik tanımlarına etiket ekleme, birden çok etiket, düzeltmelerden otomatik öğrenme ve yeni etiket raporları bu isteğin kapsamında değildir. Mevcut kategori raporları çalışmaya devam eder.
+
+Doğrulama: eski veritabanına tekrar uygulanabilen eklemeli migration; etiket yönetimi, arşivlenmiş bağlantılar, geçersiz kimlikte atomik başarısızlık, bakiyelerin değişmemesi; AI referans gizliliği, doğru/yanlış/eski kimlik, manuel düzeltme; mobil/masaüstü açık/koyu tarayıcı akışı. Mevcut yayın yetkisi kapsamında test edilmiş sürüm canlıya alınır.
+
+Uzun tarama önerileri ekranda 50 kayıtlık sayfalarda gösterilir; düzeltmeler sayfalar arasında korunur ve uygulama onayı tüm değişiklikleri kapsar. Önizleme başlamadan güncel etiket kataloğu yüklenir; bilinmeyen veya arşivlenmiş hedefe kullanıcıya adı gösterilmeden onay verilemez. Aynı güncel katalog kontrolü yeni AI kayıt önizlemesinde de uygulanır.

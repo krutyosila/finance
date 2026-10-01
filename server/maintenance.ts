@@ -253,6 +253,8 @@ export async function exportFinancialState(
     'amountTRY',
     'exchangeRate',
     'category',
+    'labelId',
+    'labelName',
     'description',
     'accountId',
     'destinationAccountId',
@@ -269,7 +271,11 @@ export async function exportFinancialState(
     'updatedAt',
     'deletedAt',
   ];
-  const transactions = state.transactions as unknown as Record<string, unknown>[];
+  const labelNames = new Map(state.labels.map((label) => [label.id, label.name]));
+  const transactions = state.transactions.map((transaction) => ({
+    ...transaction,
+    labelName: transaction.labelId ? (labelNames.get(transaction.labelId) ?? null) : null,
+  })) as unknown as Record<string, unknown>[];
   const monetaryColumns = new Set(['amount', 'amountTRY', 'destinationAmount', 'exchangeRate']);
   const csv =
     [

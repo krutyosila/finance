@@ -1,19 +1,23 @@
 import type { AiPlan, AiRecordDraft, AiRecordKind } from '../../shared/types';
 import type { AiReferences } from './client';
 
-export const AI_REFERENCE_KINDS: Record<string, AiRecordKind> = {
+type AiReferenceKind = AiRecordKind | 'label';
+export const LABEL_REFERENCE_ISSUE =
+  'Etiket bulunamadı; etkin bir etiket seçin veya etiketi kaldırın.';
+export const AI_REFERENCE_KINDS: Record<string, AiReferenceKind> = {
   accountId: 'account',
   destinationAccountId: 'account',
   debtId: 'debt',
   obligationId: 'obligation',
   subscriptionId: 'subscription',
+  labelId: 'label',
 };
 
 /** Keep one call's short reference tokens bound to its exact local snapshot. */
 export function prepareAiReferences(original: AiReferences) {
-  const aliases = new Map<AiRecordKind, Map<string, string>>();
-  const persistent = new Map<AiRecordKind, Set<string>>();
-  function shorten<T extends { id: string }>(kind: AiRecordKind, rows: T[]): T[] {
+  const aliases = new Map<AiReferenceKind, Map<string, string>>();
+  const persistent = new Map<AiReferenceKind, Set<string>>();
+  function shorten<T extends { id: string }>(kind: AiReferenceKind, rows: T[]): T[] {
     const mapping = new Map<string, string>();
     aliases.set(kind, mapping);
     persistent.set(kind, new Set(rows.map((row) => row.id)));
@@ -36,9 +40,10 @@ export function prepareAiReferences(original: AiReferences) {
     })),
     subscriptions: shorten('subscription', original.subscriptions ?? []),
     obligations: shorten('obligation', original.obligations ?? []),
+    labels: shorten('label', original.labels ?? []),
     currentCycle: original.currentCycle ? { ...original.currentCycle, id: 'existing_cycle' } : null,
   };
-  function matches(item: AiRecordDraft | undefined, expected: AiRecordKind) {
+  function matches(item: AiRecordDraft | undefined, expected: AiReferenceKind) {
     return (
       item &&
       (item.kind === expected ||
@@ -52,12 +57,21 @@ export function prepareAiReferences(original: AiReferences) {
     resolve(plan: AiPlan): AiPlan {
       const local = new Map(plan.items.map((item) => [item.key, item]));
       const issues = [...plan.issues];
+      const labelIssues: NonNullable<AiPlan['labelIssues']> = [];
       const items = plan.items.map((item) => ({
         ...item,
         data: Object.fromEntries(
           Object.entries(item.data).map(([field, value]) => {
             const expected = AI_REFERENCE_KINDS[field];
             if (!expected || typeof value !== 'string') return [field, value];
+            if (expected === 'label') {
+              const label = value.startsWith('@')
+                ? undefined
+                : (aliases.get('label')?.get(value) ??
+                  (persistent.get('label')?.has(value) ? value : undefined));
+              if (!label) labelIssues.push({ key: item.key, message: LABEL_REFERENCE_ISSUE });
+              return [field, label ?? value];
+            }
             if (value.startsWith('@')) {
               if (local.has(value.slice(1))) return [field, value];
               return [field, aliases.get(expected)?.get(value.slice(1)) ?? value];
@@ -79,6 +93,7 @@ export function prepareAiReferences(original: AiReferences) {
       return {
         ...plan,
         items,
+        labelIssues,
         issues: [...new Set(issues)],
         certain: plan.certain && !issues.length,
       };

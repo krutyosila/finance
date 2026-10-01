@@ -52,6 +52,15 @@ export const subscriptions = sqliteTable('subscriptions', {
   scope: text('scope').notNull(),
   ...timestamps,
 });
+export const labels = sqliteTable('labels', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  normalizedName: text('normalized_name').notNull(),
+  description: text('description'),
+  archived: integer('archived', { mode: 'boolean' }).notNull(),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+});
 export const transactions = sqliteTable('transactions', {
   id: text('id').primaryKey(),
   timestamp: text('timestamp').notNull(),
@@ -61,6 +70,7 @@ export const transactions = sqliteTable('transactions', {
   amountTRYMinor: integer('amount_try_minor'),
   exchangeRate: text('exchange_rate'),
   category: text('category').notNull(),
+  labelId: text('label_id').references(() => labels.id),
   description: text('description').notNull(),
   accountId: text('account_id').references(() => accounts.id),
   destinationAccountId: text('destination_account_id').references(() => accounts.id),
@@ -98,3 +108,4 @@ export type DebtRow = typeof debts.$inferSelect;
 export type TransactionRow = typeof transactions.$inferSelect;
 export type ObligationRow = typeof obligations.$inferSelect;
 export type SubscriptionRow = typeof subscriptions.$inferSelect;
+export type LabelRow = typeof labels.$inferSelect;

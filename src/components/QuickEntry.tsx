@@ -84,7 +84,10 @@ export function QuickEntry({
       </form>
       {error && <ErrorMessage message={error} />}
       <div className="quick-ai-note">
-        <p>Notunuz; hesap, borç, abonelik ve düzenli ödeme adlarınız OpenAI ile paylaşılır.</p>
+        <p>
+          Notunuz; hesap, borç, abonelik ve düzenli ödeme adlarınız ile etkin etiketlerin adları ve
+          açıklamaları OpenAI ile paylaşılır.
+        </p>
         <button type="button" className="text-button" onClick={onSettings}>
           OpenAI ayarları
         </button>

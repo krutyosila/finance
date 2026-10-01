@@ -6,6 +6,7 @@ import { minor } from '../core/money';
 import { AuthError } from '../auth';
 import { AiError } from './errors';
 import type { AiInterpreter, AiReferences } from './client';
+import { LABEL_REFERENCE_ISSUE, prepareAiReferences } from './references';
 
 export class AiEntryService {
   private readonly pending = new Map<string, { hash: string; result: Promise<EntryResult> }>();
@@ -20,8 +21,11 @@ export class AiEntryService {
   }
   private references(): AiReferences {
     const accounts = this.finance.listAccounts(),
-      debts = this.finance.listDebts();
-    if (accounts.length > 200 || debts.length > 200)
+      debts = this.finance.listDebts(),
+      labels = this.finance
+        .listLabels()
+        .map(({ id, name, description }) => ({ id, name, description }));
+    if (accounts.length > 200 || debts.length > 200 || labels.length > 200)
       throw new AiError('AI hesap listesi sınırına ulaşıldı. Elle işlem girişi kullanın.', 400);
     const timeZone = process.env.FINANCE_TIMEZONE ?? 'Europe/Istanbul';
     return {
@@ -33,6 +37,7 @@ export class AiEntryService {
         currency,
         accountId: accountId ?? null,
       })),
+      labels,
       date: new Intl.DateTimeFormat('sv-SE', {
         timeZone,
         year: 'numeric',
@@ -44,10 +49,28 @@ export class AiEntryService {
   }
   async interpret(value: unknown): Promise<ParseResult> {
     const text = this.text(value),
-      references = this.references();
-    const result = await this.model.interpret(text, references);
-    const issues = [...result.issues],
-      draft = { ...result.draft };
+      references = this.references(),
+      snapshot = prepareAiReferences(references);
+    const result = await this.model.interpret(text, {
+      ...references,
+      labels: snapshot.references.labels,
+    });
+    const resolved = snapshot.resolve({
+      text,
+      certain: result.certain,
+      issues: result.issues,
+      items: [{ key: 'transaction', kind: 'transaction', data: result.draft }],
+    });
+    const issues = [
+        ...resolved.issues,
+        ...(resolved.labelIssues ?? []).map((issue) => issue.message),
+      ],
+      draft = { ...resolved.items[0].data } as ParseResult['draft'];
+    if (
+      draft.labelId != null &&
+      !this.finance.listLabels().some((label) => label.id === draft.labelId)
+    )
+      issues.push(LABEL_REFERENCE_ISSUE);
     if (!draft.type || !TRANSACTION_TYPES.includes(draft.type)) issues.push('İşlem türünü seçin.');
     if (!draft.currency || !CURRENCIES.includes(draft.currency))
       issues.push('Desteklenen para birimini seçin.');

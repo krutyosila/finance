@@ -30,6 +30,7 @@ const baseURL = process.env.MOBILE_QA_URL || 'http://127.0.0.1:5173';
 const output = process.env.MOBILE_QA_OUTPUT || join(tmpdir(), 'finance-mobile-qa');
 const baseline = process.argv.includes('--baseline');
 const focusTheme = process.env.MOBILE_QA_FOCUS === 'theme';
+const focusLabels = process.env.MOBILE_QA_FOCUS === 'labels';
 const skipThemeWorkflow = process.env.MOBILE_QA_SKIP_THEME_WORKFLOW === '1';
 const initialColorScheme = process.env.MOBILE_QA_THEME === 'dark' ? 'dark' : 'light';
 const stamp = '2026-10-01T12:00:00.000Z';
@@ -145,6 +146,7 @@ const transactions = ['EXPENSE', 'INCOME', 'TRANSFER'].map((type, i) => ({
   amountTRY: i ? '3456789012.34' : '123456789.99',
   exchangeRate: i ? '32.1' : null,
   category: longName,
+  labelId: i === 0 ? 'qa-label-market' : i === 2 ? 'qa-label-archived' : null,
   description: longDescription,
   accountId: i ? 'qa-wallet' : 'qa-bank',
   destinationAccountId: type === 'TRANSFER' ? 'qa-bank' : null,
@@ -158,6 +160,34 @@ const transactions = ['EXPENSE', 'INCOME', 'TRANSFER'].map((type, i) => ({
   updatedAt: stamp,
   deletedAt: null,
 }));
+const initialTransactions = structuredClone(transactions);
+const initialLabels = [
+  {
+    id: 'qa-label-market',
+    name: 'Market',
+    description: 'Gıda ve ev alışverişi',
+    archived: false,
+    createdAt: stamp,
+    updatedAt: stamp,
+  },
+  {
+    id: 'qa-label-work',
+    name: 'İş',
+    description: 'İş ve ofis harcamaları',
+    archived: false,
+    createdAt: stamp,
+    updatedAt: stamp,
+  },
+  {
+    id: 'qa-label-archived',
+    name: 'Eski etiket',
+    description: null,
+    archived: true,
+    createdAt: stamp,
+    updatedAt: stamp,
+  },
+];
+const labelCatalog = structuredClone(initialLabels);
 const metrics = Object.fromEntries(
   [
     'availableCash',
@@ -178,6 +208,7 @@ const fixture = {
   generatedAt: stamp,
   currentCycle: cycle,
   accounts,
+  labels: labelCatalog,
   balances: total,
   metrics,
   income: total,
@@ -249,6 +280,28 @@ let currentSize = '';
 let currentScreen = '';
 let aiRequests = 0;
 let logoutRequests = 0;
+let scanRequests = 0;
+let labelApplyRequests = 0;
+let transactionWrites = 0;
+let scanShouldFail = false;
+let scanAddsLabel = false;
+let heldScan;
+let releaseHeldScan;
+let heldCatalog;
+let releaseHeldCatalog;
+let lastAiConfirmation;
+
+function resetLabelFixtures() {
+  labelCatalog.splice(0, labelCatalog.length, ...structuredClone(initialLabels));
+  transactions.splice(0, transactions.length, ...structuredClone(initialTransactions));
+  scanShouldFail = false;
+  scanAddsLabel = false;
+  releaseHeldScan?.();
+  heldScan = undefined;
+  releaseHeldCatalog?.();
+  heldCatalog = undefined;
+  lastAiConfirmation = undefined;
+}
 
 function check(condition, message, detail) {
   try {
@@ -1199,9 +1252,287 @@ async function verifyFullscreenInstall(browser, size, mobile) {
   }
 }
 
+async function verifyLabelsWorkflow(page, mobile) {
+  await go(page, 'settings');
+  currentScreen = 'labels-settings';
+  const panel = page.locator('.label-settings');
+  await panel.getByRole('button', { name: 'Market etiketini düzenle', exact: true }).waitFor();
+  check(
+    (await panel.locator('.label-settings-row').count()) === 2,
+    'label manager lists only active labels',
+  );
+  await panel.getByRole('button', { name: 'Etiket ekle', exact: true }).click();
+  await modalFits(page, 'label create', mobile);
+  const dialog = page.locator('dialog[open]');
+  await dialog.getByRole('textbox').first().fill('Ulaşım');
+  await dialog.locator('textarea').fill('Toplu taşıma, taksi ve yolculuk giderleri');
+  await dialog.getByRole('button', { name: 'Etiketi ekle', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await panel.getByRole('button', { name: 'Ulaşım etiketini düzenle', exact: true }).waitFor();
+  check(
+    labelCatalog.some((label) => label.name === 'Ulaşım' && label.description.includes('taksi')),
+    'label name and guidance are saved together',
+  );
+  await panel.getByRole('button', { name: 'Ulaşım etiketini düzenle', exact: true }).click();
+  await dialog.getByRole('textbox').first().fill('Yolculuk');
+  await dialog.getByRole('button', { name: 'Değişiklikleri kaydet', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await panel.getByRole('button', { name: 'Yolculuk etiketini düzenle', exact: true }).waitFor();
+  check(
+    labelCatalog.find((label) => label.id === 'qa-label-3')?.name === 'Yolculuk',
+    'renaming keeps the catalog ID',
+  );
+  await panel.getByRole('button', { name: 'Market etiketini arşivle', exact: true }).click();
+  check(
+    (await dialog.innerText()).includes('Eski işlemlerdeki etiket bağlantıları korunacak'),
+    'archive confirmation explains historical label preservation',
+  );
+  await dialog.getByRole('button', { name: 'Arşivle', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await panel
+    .getByRole('button', { name: 'Market etiketini düzenle', exact: true })
+    .waitFor({ state: 'hidden' });
+  await widths(page, 'label manager');
+  await screenshot(page, 'labels-settings');
+
+  await go(page, 'transactions');
+  currentScreen = 'labels-transactions';
+  await page.getByLabel('Etiket: Market (arşivlenmiş)', { exact: true }).waitFor();
+  check(
+    (await page.getByLabel('Etiket: Eski etiket (arşivlenmiş)', { exact: true }).count()) === 1,
+    'archived labels remain readable on transactions',
+  );
+  await page.locator('.table-description').first().click();
+  const select = selectField(page, 'Etiket');
+  await select.waitFor();
+  check(
+    (await select.inputValue()) === 'qa-label-market',
+    'editing preserves an existing archived label',
+  );
+  check(
+    (await select.locator('option[value="qa-label-market"]').textContent()).includes('arşivlenmiş'),
+    'archived assignment is explicitly marked in the selector',
+  );
+  const categoryBefore = transactions[0].category;
+  await select.selectOption('qa-label-work');
+  await dialog.getByRole('button', { name: 'Değişiklikleri kaydet', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  await page.getByLabel('Etiket: İş', { exact: true }).waitFor();
+  check(
+    transactions[0].labelId === 'qa-label-work' && transactions[0].category === categoryBefore,
+    'manual label assignment keeps the category',
+  );
+  await page.getByRole('button', { name: 'Filtreler', exact: true }).click();
+  const filter = page.locator('.filter-grid select:has(option[value="unassigned"])');
+  await filter.selectOption('unassigned');
+  await page.waitForFunction(
+    () => document.querySelectorAll('.transaction-table tbody tr').length === 1,
+  );
+  check(
+    (await page.locator('.transaction-table tbody tr').count()) === 1,
+    'unassigned-label filter selects the matching transaction',
+  );
+  await filter.selectOption('qa-label-archived');
+  await page.getByLabel('Etiket: Eski etiket (arşivlenmiş)', { exact: true }).waitFor();
+  check(
+    (await page.locator('.transaction-table tbody tr').count()) === 1,
+    'archived-label filter finds historical assignments',
+  );
+  await page.getByRole('button', { name: 'Filtreleri temizle', exact: true }).click();
+  await page.waitForFunction(
+    () => document.querySelectorAll('.transaction-table tbody tr').length === 3,
+  );
+
+  await page.locator('.quick-add-fab').click();
+  await page.locator('.quick-input-row textarea').fill('QA_LABEL_ISSUE');
+  await page.getByRole('button', { name: 'Yapay zekâ ile kayıtları önizle', exact: true }).click();
+  await page.locator('.ai-plan-review').waitFor();
+  const confirm = dialog.getByRole('button', {
+    name: 'Tüm kayıtları onayla ve kaydet',
+    exact: true,
+  });
+  check(await confirm.isDisabled(), 'unresolved label validation blocks plan confirmation');
+  const aiBefore = aiRequests;
+  await dialog
+    .getByRole('combobox', { name: '2. kayıt etiketi', exact: true })
+    .selectOption('qa-label-work');
+  check(
+    !(await confirm.isDisabled()) && aiRequests === aiBefore,
+    'local label correction enables financially valid preview without another AI call',
+  );
+  await modalFits(page, 'label AI review', mobile);
+  await screenshot(page, 'labels-ai-review');
+  await confirm.click();
+  await dialog.waitFor({ state: 'hidden' });
+  check(
+    lastAiConfirmation.items.find((item) => item.key === 'transaction').data.labelId ===
+      'qa-label-work',
+    'AI confirmation contains the manually selected label',
+  );
+  check(
+    lastAiConfirmation.certain &&
+      !lastAiConfirmation.issues.length &&
+      !lastAiConfirmation.labelIssues.length,
+    'local label correction retains financial certainty and clears only label issues',
+  );
+
+  await page.locator('.quick-add-fab').click();
+  await page.locator('.quick-input-row textarea').fill('QA_LABEL_RACE');
+  heldCatalog = new Promise((resolve) => {
+    releaseHeldCatalog = resolve;
+  });
+  const catalogRequested = page.waitForRequest(
+    (request) => new URL(request.url()).pathname === '/api/labels' && request.method() === 'GET',
+  );
+  await page.getByRole('button', { name: 'Yapay zekâ ile kayıtları önizle', exact: true }).click();
+  await catalogRequested;
+  await page.locator('.ai-plan-review').waitFor();
+  check(
+    await confirm.isDisabled(),
+    'AI confirmation waits while the current label catalog is loading',
+  );
+  releaseHeldCatalog();
+  heldCatalog = undefined;
+  const newAiLabel = dialog.getByRole('combobox', { name: '2. kayıt etiketi', exact: true });
+  await newAiLabel.locator('option[value="qa-label-ai-new"]').waitFor({ state: 'attached' });
+  check(
+    (await newAiLabel.inputValue()) === 'qa-label-ai-new' &&
+      (await newAiLabel.locator('option[value="qa-label-ai-new"]').textContent()) ===
+        'Yeni AI etiketi',
+    'AI review refreshes and names a newly-created valid label before confirmation',
+  );
+  check(
+    !(await confirm.isDisabled()),
+    'AI review enables confirmation only after the selected label is known',
+  );
+  await close(page);
+
+  await go(page, 'settings');
+  currentScreen = 'labels-scan';
+  const beforeScan = structuredClone(transactions);
+  const applyBefore = labelApplyRequests;
+  heldScan = new Promise((resolve) => {
+    releaseHeldScan = resolve;
+  });
+  const scansBeforeCancel = scanRequests;
+  const started = page.waitForRequest((request) => request.url().includes('/ai/labels/scan'));
+  await panel.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  await started;
+  await dialog.getByRole('progressbar', { name: 'Taranan işlemler', exact: true }).waitFor();
+  await dialog.getByRole('button', { name: 'Vazgeç', exact: true }).click();
+  const completed = page.waitForResponse((response) => response.url().includes('/ai/labels/scan'));
+  releaseHeldScan();
+  await completed;
+  heldScan = undefined;
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  check(
+    !(await dialog.count()) &&
+      labelApplyRequests === applyBefore &&
+      scanRequests === scansBeforeCancel + 1,
+    'cancelled in-flight scan ignores late suggestions and never applies records',
+  );
+  await panel.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Tüm değişiklikleri uygula', exact: true }).waitFor();
+  check(
+    labelApplyRequests === applyBefore &&
+      JSON.stringify(transactions) === JSON.stringify(beforeScan),
+    'completed scan shows suggestions without modifying any transaction',
+  );
+  await modalFits(page, 'label scan review', mobile);
+  await screenshot(page, 'labels-scan-review');
+  await close(page);
+  check(labelApplyRequests === applyBefore, 'closing scan review applies nothing');
+
+  scanShouldFail = true;
+  await panel.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  await dialog.getByRole('alert').waitFor();
+  check(
+    labelApplyRequests === applyBefore &&
+      JSON.stringify(transactions) === JSON.stringify(beforeScan),
+    'scan provider failure leaves all labels unchanged',
+  );
+  await close(page);
+  scanShouldFail = false;
+
+  scanAddsLabel = true;
+  await panel.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  const addedLabel = dialog.getByRole('combobox', { name: '1. işlemin yeni etiketi', exact: true });
+  await addedLabel.waitFor();
+  check(
+    (await addedLabel.inputValue()) === 'qa-label-late' &&
+      (await addedLabel.locator('option[value="qa-label-late"]').textContent()) ===
+        'Sonradan eklenen',
+    'scan preview refreshes the catalog and identifies a label added from another tab',
+  );
+  await dialog.getByRole('button', { name: 'Tüm değişiklikleri uygula', exact: true }).click();
+  await dialog.waitFor({ state: 'hidden' });
+  check(
+    labelApplyRequests === applyBefore + 1 &&
+      transactions[1].labelId === 'qa-label-work' &&
+      transactions[2].labelId === null,
+    'explicit apply relabels existing records and clears unmatched labels',
+  );
+  const financial = (rows) => rows.map(({ labelId, updatedAt, ...row }) => row);
+  check(
+    JSON.stringify(financial(transactions)) === JSON.stringify(financial(beforeScan)),
+    'bulk relabeling changes no financial or descriptive fields',
+  );
+  check(
+    scanRequests >= 3 && transactionWrites > 0,
+    'label workflow used mocked scans and manual editing without real data',
+  );
+  await widths(page, 'label scan completion');
+
+  transactions.push(
+    ...Array.from({ length: 57 }, (_, index) => ({
+      ...structuredClone(transactions[1]),
+      id: `qa-large-${index}`,
+      labelId: null,
+      updatedAt: stamp,
+    })),
+  );
+  const scansBeforeLarge = scanRequests;
+  const appliesBeforeLarge = labelApplyRequests;
+  await panel.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  const nextPage = dialog.getByRole('button', { name: 'Sonraki öneriler', exact: true });
+  await nextPage.waitFor();
+  check(
+    (await dialog.locator('.label-scan-list > li').count()) === 50 &&
+      scanRequests === scansBeforeLarge + 2,
+    'large scans use bounded provider batches and display at most 50 suggestions',
+  );
+  await nextPage.click();
+  check(
+    (await dialog.locator('.label-scan-list > li').count()) === 7,
+    'remaining suggestions are reachable on the second page',
+  );
+  const lateChoice = dialog.getByRole('combobox', {
+    name: '51. işlemin yeni etiketi',
+    exact: true,
+  });
+  await lateChoice.selectOption('');
+  await dialog.getByRole('button', { name: 'Önceki öneriler', exact: true }).click();
+  await nextPage.click();
+  check(
+    (await lateChoice.inputValue()) === '',
+    'manual label overrides persist across suggestion pages using global indices',
+  );
+  await widths(page, 'paginated label scan');
+  await screenshot(page, 'labels-scan-paged');
+  await close(page);
+  check(
+    labelApplyRequests === appliesBeforeLarge,
+    'paging and cancelling a large scan changes no records',
+  );
+}
+
 async function routeAPI(route) {
   const url = new URL(route.request().url());
   const path = url.pathname.replace(/^\/api/, '');
+  const method = route.request().method();
+  const input = method === 'GET' ? {} : route.request().postDataJSON() || {};
   let data;
   let status = 200;
   if (path === '/auth/session')
@@ -1214,13 +1545,81 @@ async function routeAPI(route) {
     logoutRequests++;
     data = { ok: true };
   } else if (path === '/context' || path === '/reports') data = fixture;
-  else if (path === '/transactions') data = transactions;
-  else if (path === '/cycles') data = [cycle, { ...cycle, id: 'qa-previous-cycle', end: stamp }];
+  else if (path === '/labels' && method === 'GET') {
+    if (heldCatalog) await heldCatalog;
+    data = labelCatalog;
+  } else if (path === '/labels' && method === 'POST') {
+    data = {
+      ...input,
+      id: `qa-label-${labelCatalog.length}`,
+      archived: false,
+      createdAt: stamp,
+      updatedAt: stamp,
+    };
+    labelCatalog.push(data);
+    status = 201;
+  } else if (path.startsWith('/labels/') && method === 'PATCH') {
+    data = labelCatalog.find((label) => label.id === path.split('/')[2]);
+    Object.assign(data, input);
+  } else if (path.startsWith('/labels/') && method === 'DELETE') {
+    data = labelCatalog.find((label) => label.id === path.split('/')[2]);
+    data.archived = true;
+  } else if (path === '/transactions' && method === 'GET') {
+    data = transactions.filter(
+      (transaction) =>
+        !url.searchParams.has('labelId') ||
+        (url.searchParams.get('labelId') === 'unassigned'
+          ? !transaction.labelId
+          : transaction.labelId === url.searchParams.get('labelId')),
+    );
+  } else if (path.startsWith('/transactions/') && method === 'PATCH') {
+    transactionWrites++;
+    data = transactions.find((transaction) => transaction.id === path.split('/')[2]);
+    Object.assign(data, input, { updatedAt: '2026-10-01T12:00:01.000Z' });
+  } else if (path === '/ai/labels/scan') {
+    scanRequests++;
+    if (heldScan) await heldScan;
+    const addLabel = scanAddsLabel;
+    scanAddsLabel = false;
+    if (addLabel)
+      labelCatalog.push({ ...initialLabels[0], id: 'qa-label-late', name: 'Sonradan eklenen' });
+    if (scanShouldFail) {
+      status = 503;
+      data = { error: 'Örnek tarama bağlantı hatası' };
+    } else
+      data = {
+        suggestions: input.transactions.map((snapshot, i) => ({
+          ...snapshot,
+          labelId: addLabel && i === 0 ? 'qa-label-late' : i === 2 ? null : 'qa-label-work',
+        })),
+      };
+  } else if (path === '/ai/labels/apply') {
+    labelApplyRequests++;
+    let updated = 0;
+    for (const suggestion of input.suggestions) {
+      const transaction = transactions.find((row) => row.id === suggestion.transactionId);
+      if ((transaction.labelId || null) !== suggestion.labelId) {
+        transaction.labelId = suggestion.labelId;
+        transaction.updatedAt = '2026-10-01T12:00:02.000Z';
+        updated++;
+      }
+    }
+    data = { updated };
+  } else if (path === '/ai/entry/confirm') {
+    lastAiConfirmation = input.plan;
+    data = {
+      saved: true,
+      records: [{ key: 'transaction', kind: 'transaction', id: 'qa-created' }],
+    };
+    status = 201;
+  } else if (path === '/cycles') data = [cycle, { ...cycle, id: 'qa-previous-cycle', end: stamp }];
   else if (path === '/settings/ai')
     data = { provider: 'openai', configured: true, model: 'gpt-5.4-mini' };
   else if (path === '/ai/entry') {
     aiRequests++;
     const text = route.request().postDataJSON()?.text || '';
+    if (text === 'QA_LABEL_RACE')
+      labelCatalog.push({ ...initialLabels[0], id: 'qa-label-ai-new', name: 'Yeni AI etiketi' });
     if (text === 'QA_ERROR') {
       status = 503;
       data = { error: `Örnek bağlantı hatası: ${longName}` };
@@ -1229,6 +1628,9 @@ async function routeAPI(route) {
         text,
         certain: true,
         issues: [],
+        ...(text === 'QA_LABEL_ISSUE'
+          ? { labelIssues: [{ key: 'transaction', message: 'Etiket artık kullanılamıyor.' }] }
+          : {}),
         items: [
           {
             key: 'account',
@@ -1254,6 +1656,12 @@ async function routeAPI(route) {
               description: longDescription,
               timestamp: stamp,
               notes: longDescription,
+              labelId:
+                text === 'QA_LABEL_ISSUE'
+                  ? 'qa-invalid-label'
+                  : text === 'QA_LABEL_RACE'
+                    ? 'qa-label-ai-new'
+                    : 'qa-label-market',
             },
           },
           {
@@ -1318,6 +1726,7 @@ try {
     (size) => !only || only.includes(`${size.width}x${size.height}`),
   )) {
     currentSize = `${size.width}x${size.height}`;
+    resetLabelFixtures();
     const mobile = mobileSize(size);
     const context = await browser.newContext({
       viewport: size,
@@ -1359,6 +1768,14 @@ try {
     });
     if (focusTheme) {
       await step('theme', () => verifyThemeWorkflow(page, mobile));
+      console.log(
+        `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
+      );
+      await context.close();
+      continue;
+    }
+    if (focusLabels) {
+      await step('labels', () => verifyLabelsWorkflow(page, mobile));
       console.log(
         `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
       );

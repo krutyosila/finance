@@ -25,6 +25,28 @@ export type DebtType = (typeof DEBT_TYPES)[number];
 export type MoneyTotals = Partial<Record<Currency, string>>;
 export type Scope = 'PERSONAL' | 'BUSINESS';
 export type Frequency = 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'YEARLY';
+export interface LabelInput {
+  name: string;
+  description?: string | null;
+}
+export interface CatalogLabel {
+  id: string;
+  name: string;
+  description: string | null;
+  archived: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+export type Label = CatalogLabel;
+export interface LabelScanSnapshot {
+  transactionId: string;
+  transactionUpdatedAt: string;
+  previousLabelId: string | null;
+}
+export type LabelScanTransaction = LabelScanSnapshot;
+export interface LabelScanSuggestion extends LabelScanSnapshot {
+  labelId: string | null;
+}
 export interface TransactionInput {
   type: TransactionType;
   amount: string;
@@ -33,6 +55,7 @@ export interface TransactionInput {
   amountTRY?: string | null;
   exchangeRate?: string | null;
   category?: string;
+  labelId?: string | null;
   description: string;
   accountId?: string | null;
   destinationAccountId?: string | null;
@@ -53,6 +76,7 @@ export interface Transaction extends Omit<TransactionInput, 'timestamp'> {
   amountTRY: string | null;
   exchangeRate: string | null;
   category: string;
+  labelId?: string | null;
   accountId: string | null;
   destinationAccountId: string | null;
   destinationAmount: string | null;
@@ -177,6 +201,7 @@ export interface FinancialContext {
   savings: MoneyTotals;
   subscriptions: Subscription[];
   recurringObligations: Obligation[];
+  labels?: CatalogLabel[];
   categoryTotals: { category: string; totals: MoneyTotals }[];
   recentTransactions: Transaction[];
   netFinancialPosition: MoneyTotals;
@@ -223,6 +248,7 @@ export interface AiPlan {
   certain: boolean;
   issues: string[];
   items: AiRecordDraft[];
+  labelIssues?: { key: string; message: string }[];
 }
 export type AiPlanResult =
   | { saved: true; records: { key: string; kind: AiRecordKind; id: string }[] }
@@ -232,6 +258,7 @@ export interface TransactionFilter {
   type?: string;
   currency?: string;
   category?: string;
+  labelId?: string;
   accountId?: string;
   from?: string;
   to?: string;

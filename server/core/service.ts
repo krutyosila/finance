@@ -26,6 +26,9 @@ import type {
   ParseResult,
   EntryResult,
   Currency,
+  Label,
+  LabelInput,
+  LabelScanSuggestion,
 } from '../../shared/types';
 const currency = z.enum(CURRENCIES),
   nullable = z.string().nullable().optional();
@@ -39,6 +42,7 @@ const transactionValidator = z.object({
   amountTRY: nullable,
   exchangeRate: nullable,
   category: z.string().max(100).optional(),
+  labelId: z.string().min(1).max(128).nullable().optional(),
   description: name,
   accountId: nullable,
   destinationAccountId: nullable,
@@ -105,6 +109,35 @@ const subscriptionValidator = z.object({
   scope: scope.optional(),
 });
 const now = () => new Date().toISOString();
+function updatedAfter(previous: string): string {
+  const oldTime = Date.parse(previous);
+  return new Date(Math.max(Date.now(), Number.isFinite(oldTime) ? oldTime + 1 : 0)).toISOString();
+}
+export class LabelScanConflictError extends Error {
+  constructor() {
+    super('Bir işlem taramadan sonra değişti veya silindi. İşlemleri yeniden tarayın.');
+  }
+}
+const labelScanValidator = z
+  .array(
+    z
+      .object({
+        transactionId: z.string().min(1).max(128),
+        transactionUpdatedAt: z.string().min(1).max(100),
+        previousLabelId: z.string().min(1).max(128).nullable(),
+        labelId: z.string().min(1).max(128).nullable(),
+      })
+      .strict(),
+  )
+  .max(5000);
+const labelValidator = z.object({
+  name: z
+    .string()
+    .transform((value) => value.trim().replace(/\s+/g, ' '))
+    .pipe(z.string().min(1).max(80)),
+  description: z.string().trim().max(500).nullable().optional(),
+});
+const labelNameKey = (value: string) => value.normalize('NFKC').toLocaleLowerCase('tr');
 function instant(value: string): string {
   if (
     !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(
@@ -220,6 +253,85 @@ export class FinanceService {
   }
   private atomic<T>(fn: () => T): T {
     return this.sqlite.transaction(fn)();
+  }
+  private label(row: schema.LabelRow): Label {
+    const { normalizedName: _normalizedName, ...label } = row;
+    return label;
+  }
+  listLabels(includeArchived = false): Label[] {
+    return this.db
+      .select()
+      .from(schema.labels)
+      .all()
+      .filter((label) => includeArchived || !label.archived)
+      .sort((a, b) => a.name.localeCompare(b.name, 'tr') || a.id.localeCompare(b.id))
+      .map((label) => this.label(label));
+  }
+  private labelRecord(id: string): schema.LabelRow {
+    const label = this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+    if (!label) throw new Error('Etiket bulunamadı');
+    return label;
+  }
+  private uniqueLabelName(key: string, exceptId?: string) {
+    if (
+      this.db
+        .select()
+        .from(schema.labels)
+        .all()
+        .some((label) => !label.archived && label.normalizedName === key && label.id !== exceptId)
+    )
+      throw new Error('Bu adda etkin bir etiket zaten var');
+  }
+  createLabel(input: LabelInput): Label {
+    return this.atomic(() => {
+      const p = labelValidator.parse(input);
+      const normalizedName = labelNameKey(p.name);
+      this.uniqueLabelName(normalizedName);
+      const timestamp = now();
+      const row: schema.LabelRow = {
+        id: randomUUID(),
+        name: p.name,
+        normalizedName,
+        description: p.description || null,
+        archived: false,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      this.db.insert(schema.labels).values(row).run();
+      const result = this.label(row);
+      this.audit('LABEL', row.id, 'CREATE', null, result);
+      return result;
+    });
+  }
+  updateLabel(id: string, input: Partial<LabelInput>): Label {
+    return this.atomic(() => {
+      const old = this.labelRecord(id);
+      const p = labelValidator.parse({ ...this.label(old), ...input });
+      const normalizedName = labelNameKey(p.name);
+      if (!old.archived) this.uniqueLabelName(normalizedName, id);
+      const row = {
+        ...old,
+        name: p.name,
+        normalizedName,
+        description: p.description || null,
+        updatedAt: now(),
+      };
+      this.db.update(schema.labels).set(row).where(eq(schema.labels.id, id)).run();
+      const result = this.label(row);
+      this.audit('LABEL', id, 'EDIT', this.label(old), result);
+      return result;
+    });
+  }
+  archiveLabel(id: string): Label {
+    return this.atomic(() => {
+      const old = this.labelRecord(id);
+      if (old.archived) return this.label(old);
+      const row = { ...old, archived: true, updatedAt: now() };
+      this.db.update(schema.labels).set(row).where(eq(schema.labels.id, id)).run();
+      const result = this.label(row);
+      this.audit('LABEL', id, 'DELETE', this.label(old), result);
+      return result;
+    });
   }
   private replay(
     transactions?: schema.TransactionRow[],
@@ -511,6 +623,7 @@ export class FinanceService {
       amountTRY: row.amountTRYMinor == null ? null : decimal(row.amountTRYMinor),
       exchangeRate: row.exchangeRate,
       category: row.category,
+      labelId: row.labelId,
       description: row.description,
       accountId: row.accountId,
       destinationAccountId: row.destinationAccountId,
@@ -534,6 +647,11 @@ export class FinanceService {
   ): schema.TransactionRow {
     const p = transactionValidator.parse(input),
       amount = minor(p.amount, p.type === 'ADJUSTMENT' || p.type === 'SAVINGS');
+    if (p.labelId) {
+      const label = this.labelRecord(p.labelId);
+      if (label.archived && previous?.labelId !== p.labelId)
+        throw new Error('Arşivlenmiş etiket yeni işlemlerde kullanılamaz');
+    }
     if (p.type !== 'ADJUSTMENT' && (p.type === 'SAVINGS' ? amount === 0 : amount <= 0))
       throw new Error('Tutar sıfırdan büyük olmalıdır');
     const obligation = p.obligationId
@@ -581,6 +699,7 @@ export class FinanceService {
             ? converted(amount, p.exchangeRate)
             : null,
       exchangeRate: p.exchangeRate ?? null,
+      labelId: p.labelId ?? null,
       category:
         p.category?.trim() ||
         {
@@ -615,7 +734,7 @@ export class FinanceService {
           ? previous.subscriptionOccurrence
           : (subscription?.nextRenewal ?? null),
       createdAt: previous?.createdAt ?? now(),
-      updatedAt: now(),
+      updatedAt: previous ? updatedAfter(previous.updatedAt) : now(),
       deletedAt: previous?.deletedAt ?? null,
     };
     if (row.exchangeRate != null) converted(amount, row.exchangeRate);
@@ -630,6 +749,7 @@ export class FinanceService {
     return row;
   }
   listTransactions(filter: TransactionFilter = {}): Transaction[] {
+    const labelNames = new Map(this.listLabels(true).map((label) => [label.id, label.name]));
     let rows = this.db
       .select()
       .from(schema.transactions)
@@ -642,6 +762,8 @@ export class FinanceService {
         (!filter.type || t.type === filter.type) &&
         (!filter.currency || t.currency === filter.currency) &&
         (!filter.category || t.category === filter.category) &&
+        (!filter.labelId ||
+          (filter.labelId === 'unassigned' ? t.labelId === null : t.labelId === filter.labelId)) &&
         (!filter.accountId ||
           t.accountId === filter.accountId ||
           t.destinationAccountId === filter.accountId) &&
@@ -649,7 +771,13 @@ export class FinanceService {
         (!from || t.timestamp >= from) &&
         (!to || t.timestamp <= to) &&
         (!filter.search ||
-          [t.description, t.category, t.notes ?? '', t.counterparty ?? '']
+          [
+            t.description,
+            t.category,
+            t.labelId ? (labelNames.get(t.labelId) ?? '') : '',
+            t.notes ?? '',
+            t.counterparty ?? '',
+          ]
             .join(' ')
             .toLocaleLowerCase('tr')
             .includes(filter.search.toLocaleLowerCase('tr'))),
@@ -702,13 +830,52 @@ export class FinanceService {
       return result;
     });
   }
+  applyLabelScan(suggestions: LabelScanSuggestion[]): Transaction[] {
+    const proposals = labelScanValidator.parse(suggestions);
+    return this.atomic(() => {
+      const seen = new Set<string>();
+      const changes: { old: schema.TransactionRow; labelId: string | null }[] = [];
+      for (const proposal of proposals) {
+        if (seen.has(proposal.transactionId))
+          throw new Error('Tarama önerilerindeki işlem kimlikleri benzersiz olmalıdır');
+        seen.add(proposal.transactionId);
+        const old = this.db
+          .select()
+          .from(schema.transactions)
+          .where(eq(schema.transactions.id, proposal.transactionId))
+          .get();
+        if (
+          !old ||
+          old.deletedAt ||
+          old.updatedAt !== proposal.transactionUpdatedAt ||
+          old.labelId !== proposal.previousLabelId
+        )
+          throw new LabelScanConflictError();
+        if (proposal.labelId !== null && this.labelRecord(proposal.labelId).archived)
+          throw new Error('Arşivlenmiş etiket tarama önerilerinde kullanılamaz');
+        if (old.labelId !== proposal.labelId) changes.push({ old, labelId: proposal.labelId });
+      }
+      return changes.map(({ old, labelId }) => {
+        const updatedAt = updatedAfter(old.updatedAt);
+        // Only classification metadata changes; the financial ledger remains untouched.
+        this.db
+          .update(schema.transactions)
+          .set({ labelId, updatedAt })
+          .where(eq(schema.transactions.id, old.id))
+          .run();
+        const result = this.transaction({ ...old, labelId, updatedAt });
+        this.audit('TRANSACTION', old.id, 'EDIT', this.transaction(old), result);
+        return result;
+      });
+    });
+  }
   deleteTransaction(id: string) {
     return this.atomic(() => {
       const old = this.getTransaction(id);
       if (old.deletedAt) throw new Error('İşlem zaten silinmiş');
       this.db
         .update(schema.transactions)
-        .set({ deletedAt: now(), updatedAt: now() })
+        .set({ deletedAt: now(), updatedAt: updatedAfter(old.updatedAt) })
         .where(eq(schema.transactions.id, id))
         .run();
       this.replay();
@@ -721,7 +888,7 @@ export class FinanceService {
       if (!old.deletedAt) throw new Error('İşlem zaten etkin');
       this.db
         .update(schema.transactions)
-        .set({ deletedAt: null, updatedAt: now() })
+        .set({ deletedAt: null, updatedAt: updatedAfter(old.updatedAt) })
         .where(eq(schema.transactions.id, id))
         .run();
       this.replay();
@@ -735,6 +902,8 @@ export class FinanceService {
     return this.createTransaction({
       ...t,
       timestamp: now(),
+      // A copy is a new assignment; archived labels remain only on the original record.
+      labelId: t.labelId && this.labelRecord(t.labelId).archived ? null : t.labelId,
       obligationId: null,
       subscriptionId: null,
     });
@@ -1444,6 +1613,7 @@ export class FinanceService {
       savings: metrics.savings,
       subscriptions: this.listSubscriptions(),
       recurringObligations: this.listObligations(),
+      labels: this.listLabels(true),
       categoryTotals: [...r.categories].map(([category, totals]) => ({
         category,
         totals: money(totals),
@@ -1476,7 +1646,7 @@ export class FinanceService {
   }
   snapshot() {
     return {
-      schemaVersion: 1,
+      schemaVersion: 2,
       exportedAt: now(),
       context: this.getContext(),
       accounts: this.listAccounts(),
@@ -1490,9 +1660,11 @@ export class FinanceService {
       deletedTransactions: this.listTransactions({ deleted: true }),
       obligations: this.listObligations(),
       subscriptions: this.listSubscriptions(),
+      labels: this.listLabels(true),
       cycles: this.listCycles(),
       audit: this.listAudit(),
       sourceRecords: {
+        labels: this.db.select().from(schema.labels).all(),
         accounts: this.db.select().from(schema.accounts).all(),
         debts: this.db.select().from(schema.debts).all(),
         obligations: this.db.select().from(schema.obligations).all(),

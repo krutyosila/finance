@@ -15,6 +15,7 @@ import { useAuth } from '../auth';
 import { usePwa } from '../pwa';
 import { Button, ErrorMessage, Field, Loading, PageIntro, Panel, Tag } from '../components/ui';
 import { useTheme, type ThemePreference } from '../theme';
+import { LabelSettings } from '../components/LabelSettings';
 
 interface AiSettings {
   provider: 'openai';
@@ -32,7 +33,7 @@ function choiceForModel(model: string) {
   return modelPresets.some((preset) => preset.value === model) ? model : 'custom';
 }
 
-export function Settings() {
+export function Settings({ onLabelsChanged }: { onLabelsChanged?: () => void }) {
   const settings = useResource<AiSettings>('/settings/ai');
   const { session } = useAuth();
   return (
@@ -45,6 +46,9 @@ export function Settings() {
       <div className="settings-layout">
         <Panel className="settings-panel theme-settings-panel">
           <AppearanceSettings />
+        </Panel>
+        <Panel className="settings-panel labels-settings-panel">
+          <LabelSettings onChanged={onLabelsChanged} />
         </Panel>
         <Panel className="settings-panel">
           {settings.loading && !settings.data ? (
@@ -279,8 +283,9 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
         <div className="settings-privacy">
           <ShieldCheck size={18} />
           <p>
-            Yazdığınız not, hesap ve borç adlarınız işlemi anlamlandırmak için OpenAI’ye gönderilir.
-            API anahtarınız bu ekranda geri gösterilmez.
+            Yazdığınız not; hesap, borç, abonelik ve düzenli ödeme adlarınız ile etkin etiketlerin
+            adları ve açıklamaları işlemi anlamlandırmak için OpenAI’ye gönderilir. API anahtarınız
+            bu ekranda geri gösterilmez.
           </p>
         </div>
         <div className="settings-actions">

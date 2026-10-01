@@ -45,6 +45,7 @@ function output(overrides: Record<string, unknown> = {}) {
       timestamp: null,
       description: 'Market',
       category: 'Market',
+      labelId: null,
       accountId: null,
       destinationAccountId: null,
       destinationAmount: null,

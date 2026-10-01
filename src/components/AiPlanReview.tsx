@@ -1,10 +1,17 @@
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Check, LoaderCircle } from 'lucide-react';
-import type { AiPlan, AiPlanResult, FinancialContext } from '../../shared/types';
+import type { AiPlan, AiPlanResult, CatalogLabel, FinancialContext } from '../../shared/types';
 import { api } from '../api';
 import { usePwa } from '../pwa';
-import { Button, ErrorMessage, Field } from './ui';
-import { appendPlanFollowUp, canConfirmPlan, describeAiItem } from './aiPlanPresentation';
+import { Button, ErrorMessage, Field, Loading } from './ui';
+import { LabelSelect } from './LabelSelect';
+import {
+  appendPlanFollowUp,
+  canConfirmPlan,
+  changePlanLabel,
+  describeAiItem,
+  planLabelsAvailable,
+} from './aiPlanPresentation';
 
 export function AiPlanReview({
   initial,
@@ -25,7 +32,34 @@ export function AiPlanReview({
   const [error, setError] = useState('');
   const requestId = useRef<string | null>(null);
   const inFlight = useRef(false);
+  const catalogGeneration = useRef(0);
+  const [catalog, setCatalog] = useState<CatalogLabel[] | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState('');
   const { online } = usePwa();
+  const loadCatalog = useCallback(async () => {
+    const generation = ++catalogGeneration.current;
+    setCatalogLoading(true);
+    setCatalogError('');
+    try {
+      const labels = await api<CatalogLabel[]>('/labels');
+      if (generation === catalogGeneration.current) setCatalog(labels);
+    } catch (reason) {
+      if (generation === catalogGeneration.current) setCatalogError((reason as Error).message);
+    } finally {
+      if (generation === catalogGeneration.current) setCatalogLoading(false);
+    }
+  }, []);
+  useEffect(() => {
+    void loadCatalog();
+    return () => {
+      catalogGeneration.current++;
+    };
+  }, [loadCatalog]);
+  const catalogReady = catalog !== null && !catalogLoading && !catalogError;
+  const labelsAvailable = planLabelsAvailable(plan, catalog || []);
+  const complete = canConfirmPlan(plan) && catalogReady && labelsAvailable;
+  const reviewContext = { ...context, labels: catalog || [] };
   function replacePlan(next: AiPlan) {
     setPlan(next);
     requestId.current = null;
@@ -35,7 +69,7 @@ export function AiPlanReview({
     if (
       inFlight.current ||
       !online ||
-      (action === 'save' && (!canConfirmPlan(plan) || followUp.trim())) ||
+      (action === 'save' && (!complete || followUp.trim())) ||
       (action === 'preview' && !followUp.trim())
     )
       return;
@@ -47,6 +81,7 @@ export function AiPlanReview({
       if (action === 'preview') {
         const text = appendPlanFollowUp(plan, followUp);
         replacePlan(await api<AiPlan>('/ai/entry', 'POST', { text }));
+        await loadCatalog();
       } else {
         requestId.current ||= crypto.randomUUID();
         const result = await api<AiPlanResult>('/ai/entry/confirm', 'POST', {
@@ -54,7 +89,10 @@ export function AiPlanReview({
           requestId: requestId.current,
         });
         if (result.saved) onSaved();
-        else replacePlan(result.confirmation);
+        else {
+          replacePlan(result.confirmation);
+          await loadCatalog();
+        }
       }
     } catch (reason) {
       setError((reason as Error).message);
@@ -64,15 +102,14 @@ export function AiPlanReview({
       onBusyChange?.(false);
     }
   }
-  const complete = canConfirmPlan(plan);
   const remaining = Math.max(0, 12000 - plan.text.length - '\n\nEk bilgi: '.length);
   return (
-    <div className="ai-plan-review" aria-busy={!!busy}>
+    <div className="ai-plan-review" aria-busy={!!busy || catalogLoading}>
       <p className="ai-preview-note">
         Henüz hiçbir kayıt eklenmedi. Aşağıdaki {plan.items.length} kaydı ve bağlantılarını kontrol
         edin.
       </p>
-      {!complete && (
+      {catalogReady && !complete && (
         <div className="notice" role="status">
           <div>
             <strong>Kaydetmeden önce ayrıntıları tamamlayın</strong>
@@ -80,6 +117,15 @@ export function AiPlanReview({
               {plan.issues.map((issue, index) => (
                 <li key={index}>{issue}</li>
               ))}
+              {plan.labelIssues?.map((issue, index) => (
+                <li key={`label-${issue.key}-${index}`}>{issue.message}</li>
+              ))}
+              {!labelsAvailable && (
+                <li>
+                  Önerilen etiketlerden biri etkin değil. Etiket seçimini düzeltin veya Etiket yok
+                  seçin.
+                </li>
+              )}
               {!plan.certain && !plan.issues.length && (
                 <li>Notunuzu kesinleştirmek için ek bilgi gerekiyor.</li>
               )}
@@ -93,28 +139,50 @@ export function AiPlanReview({
         </div>
       )}
       {error && <ErrorMessage message={error} />}
-      <ol className="ai-plan-items">
-        {plan.items.map((item, index) => {
-          const view = describeAiItem(item, plan, context);
-          return (
-            <li className="ai-plan-item" key={`${item.key}-${index}`}>
-              <div className="ai-plan-item-heading">
-                <span className="tag">{view.kind}</span>
-                <h3>{view.title}</h3>
-              </div>
-              <dl>
-                {view.fields.map(([label, value], index) => (
-                  <div key={`${label}-${index}`}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {view.note && <p className="form-note">{view.note}</p>}
-            </li>
-          );
-        })}
-      </ol>
+      {catalogLoading && <Loading text="Etiketler güncelleniyor…" />}
+      {catalogError && <ErrorMessage message={catalogError} retry={() => void loadCatalog()} />}
+      {catalogReady && (
+        <ol className="ai-plan-items">
+          {plan.items.map((item, index) => {
+            const view = describeAiItem(item, plan, reviewContext);
+            return (
+              <li className="ai-plan-item" key={`${item.key}-${index}`}>
+                <div className="ai-plan-item-heading">
+                  <span className="tag">{view.kind}</span>
+                  <h3>{view.title}</h3>
+                </div>
+                <dl>
+                  {view.fields.map(([label, value], index) => (
+                    <div key={`${label}-${index}`}>
+                      <dt>{label}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {item.kind === 'transaction' && (
+                  <Field
+                    label="Etiket"
+                    hint="Kaydetmeden önce önerilen etiketi değiştirebilirsiniz."
+                  >
+                    <LabelSelect
+                      labels={catalog || []}
+                      value={item.data.labelId}
+                      disabled={!!busy}
+                      ariaLabel={`${index + 1}. kayıt etiketi`}
+                      onChange={(labelId) => {
+                        setPlan((previous) => changePlanLabel(previous, index, labelId));
+                        requestId.current = null;
+                        setError('');
+                      }}
+                    />
+                  </Field>
+                )}
+                {view.note && <p className="form-note">{view.note}</p>}
+              </li>
+            );
+          })}
+        </ol>
+      )}
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -131,7 +199,7 @@ export function AiPlanReview({
             value={followUp}
             onChange={(event) => setFollowUp(event.target.value)}
             maxLength={remaining}
-            disabled={!!busy || remaining === 0}
+            disabled={!!busy || catalogLoading || remaining === 0}
             placeholder="Örn. Kartın borcu 5.000 TL; kira her ayın 5’inde."
             aria-describedby="ai-follow-up-limit"
           />
@@ -143,7 +211,7 @@ export function AiPlanReview({
           <Button
             type="submit"
             variant="secondary"
-            disabled={!!busy || !online || !followUp.trim()}
+            disabled={!!busy || catalogLoading || !online || !followUp.trim()}
           >
             {busy === 'preview' ? <LoaderCircle size={16} className="spin" /> : null}
             {busy === 'preview' ? 'Yorumlanıyor…' : 'Önizlemeyi güncelle'}

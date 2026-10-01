@@ -41,7 +41,7 @@ Tarayıcıya `__Host-finance_session` çerezi Secure, HttpOnly, SameSite=Strict 
 
 İsteğe bağlı filtreler: `cycleId`, `from`, `to`, `all=true`. Tarihler `YYYY-MM-DD` veya saat dilimi içeren ISO zaman damgalarıdır. Yalnızca tarih içeren aralıklar varsayılan olarak Europe/Istanbul kullanır (`FINANCE_TIMEZONE` ile değiştirilebilir); bitiş günü tamamen dahildir. Akışlar seçilen dönemden, bakiyeler ve net durum o dönemin sonuna kadar önceki kayıtlardan hesaplanır. Açık tarihler yoksa etkin döngü varsayılandır. `all=true` bu varsayılanı kaldırır; tüm geçmişi seçer, `from`/`to` ile daraltılabilir. Açık `cycleId`, o döngünün varsayılan sınırlarını seçer.
 
-Durum nesnesi şu alanları içerir: `generatedAt`, `currentCycle`, `accounts`, `balances`, `metrics`, `income`, `expenses`, `cashOutflow`, `debts`, `debtPayments`, `debtUsage`, `savings`, `subscriptions`, `recurringObligations`, `categoryTotals`, `recentTransactions`, `netFinancialPosition`, `transactionCount`, `unassignedCash`, `charts.daily`, `period`, `openingPosition`, `positionChange`, `scopeTotals`. Ölçütler kullanılabilir nakit, gelir, gerçek gider, brüt nakit çıkışı, borç, borç ödemesi, yeni borç kullanımı, mevcut birikim, birikim hareketi, net nakit akışı, varlık ve net finans durumunu içerir. Kesin tanımlar [FINANCE_RULES.md](FINANCE_RULES.md) dosyasındadır.
+Durum nesnesi şu alanları içerir: `generatedAt`, `currentCycle`, `accounts`, `balances`, `metrics`, `income`, `expenses`, `cashOutflow`, `debts`, `debtPayments`, `debtUsage`, `savings`, `subscriptions`, `recurringObligations`, `labels`, `categoryTotals`, `recentTransactions`, `netFinancialPosition`, `transactionCount`, `unassignedCash`, `charts.daily`, `period`, `openingPosition`, `positionChange`, `scopeTotals`. Ölçütler kullanılabilir nakit, gelir, gerçek gider, brüt nakit çıkışı, borç, borç ödemesi, yeni borç kullanımı, mevcut birikim, birikim hareketi, net nakit akışı, varlık ve net finans durumunu içerir. Kesin tanımlar [FINANCE_RULES.md](FINANCE_RULES.md) dosyasındadır.
 
 Para toplamları, para biriminden ondalık metne eşlemedir: `{ "TRY": "100.00", "USD": "24.10" }`. Eksik anahtar, o para biriminde katkı yapan kayıt olmadığını belirtir. Tamamen boş toplam `{}` olur. Kullanılmış para birimindeki sıfır sonuç `"0.00"` olarak döner. Açık dönüşüm verilmeden farklı para birimlerini birleştirmeyin.
 
@@ -59,7 +59,7 @@ Para toplamları, para biriminden ondalık metne eşlemedir: `{ "TRY": "100.00",
 | POST   | `/api/parse`                      | `{ "text": "450 market" }` → yalnızca taslak                                          |
 | POST   | `/api/ai/transaction`             | `{ "text": "450 market", "requestId": "BENZERSIZ_KIMLIK" }` → kayıt veya onay bilgisi |
 
-Liste filtreleri: `search`, `type`, `currency`, `category`, `accountId`, `scope`, `from`, `to`, `deleted=true`. Varsayılan yalnızca etkin işlemlerdir. `deleted=true` yalnızca silinmiş işlemleri döndürür.
+Liste filtreleri: `search`, `type`, `currency`, `category`, `labelId`, `accountId`, `scope`, `from`, `to`, `deleted=true`. `labelId=unassigned` etiketsiz işlemleri seçer; arşivlenmiş bir etiketin kimliği geçmiş işlemleri filtreleyebilir. `search` etiket adlarını da tarar. Varsayılan yalnızca etkin işlemlerdir. `deleted=true` yalnızca silinmiş işlemleri döndürür.
 
 Yapılandırılmış işlem alanları:
 
@@ -73,6 +73,7 @@ Yapılandırılmış işlem alanları:
 | `amountTRY`                              | İsteğe bağlı/null gerçek TL tutarı                                                               |
 | `exchangeRate`                           | İsteğe bağlı/null, bir birim işlem para birimi için pozitif ondalık TL kuru                      |
 | `category`                               | İsteğe bağlı metin; verilmezse işlem türüne uygun kategori                                       |
+| `labelId`                                | İsteğe bağlı/null tek etkin etiket kimliği; PATCH'te atlama korur, null kaldırır                 |
 | `accountId`                              | İsteğe bağlı/null kaynak veya ödeme hesabı; hesapsız nakit atanmaz                               |
 | `destinationAccountId`                   | Transfer veya birikim hedefi                                                                     |
 | `destinationAmount`                      | Farklı para birimli transferde açıkça girilen alınan tutar                                       |
@@ -117,7 +118,26 @@ Mevcut kayıtlar gerçek kimlikleriyle, aynı plan içindeki kayıtlar `@key` il
 
 Onay tek atomik işlemde kayıtları, audit ve tekrar koruma makbuzunu yazar. `requestId` 8–128 ASCII harf/rakam/alt çizgi/tiredir. Aynı kimlik ve aynı plan önceki sonucu döndürür; farklı plan 409 alır. Kimlikler eski tek işlem AI makbuzlarından ayrı `plan:` ad alanında tutulur. Provider tamamlandıktan sonra oturum yeniden doğrulanır; oturumu iptal edilmiş kullanıcıya özel plan döndürülmez. Onayda oturum yazma işleminin içinde de doğrulanır.
 
-Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, isteğe özel kısa referans kimlikleri, tür/para birimi ve yerel tarih/saat dilimi ile açık dönem adı/kimliğini OpenAI'a gönderir. Sunucu bu kısa kimlikleri aynı yorumlama isteğine ait referans eşlemesinden gerçek kimliklere çevirir; onay planı gerçek kimlik veya @key içerir. Bilinmeyen ya da belirsiz bağlantı tahmin edilmez. Mevcut bakiyeler/ücretler, tüm defter ve kimlik bilgileri gönderilmez. Planlı kayıt tanımı gerçekleşmiş gider oluşturmaz; gerçekleşmiş ödeme açıkça istenmişse ilgili ID'ye bağlı transaction oluşturulur. Silme/düzenleme veya banka/dosya içe aktarma bu akışta yoktur.
+Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, isteğe özel kısa referans kimlikleri, tür/para birimi, etkin etiket adları/açıklamaları ve yerel tarih/saat dilimi ile açık dönem adı/kimliğini OpenAI'a gönderir. Sunucu bu kısa kimlikleri aynı yorumlama isteğine ait referans eşlemesinden gerçek kimliklere çevirir; onay planı gerçek kimlik veya @key içerir. Bilinmeyen ya da belirsiz bağlantı tahmin edilmez. Mevcut bakiyeler/ücretler, tüm defter ve kimlik bilgileri gönderilmez. Planlı kayıt tanımı gerçekleşmiş gider oluşturmaz; gerçekleşmiş ödeme açıkça istenmişse ilgili ID'ye bağlı transaction oluşturulur. Silme/düzenleme veya banka/dosya içe aktarma bu akışta yoktur.
+
+## Etiketler ve geçmiş işlem taraması
+
+| Yöntem | Yol                    | Gövde/sonuç                                                                        |
+| ------ | ---------------------- | ---------------------------------------------------------------------------------- |
+| GET    | `/api/labels`          | Etkin ve arşivlenmiş etiket tanımları                                              |
+| POST   | `/api/labels`          | `{ "name": "Market", "description": "Gıda ve ev alışverişi" }` → etiket            |
+| PATCH  | `/api/labels/:id`      | Ad/açıklama → aynı kimlikle güncellenmiş etiket                                    |
+| DELETE | `/api/labels/:id`      | Etiketi arşivler; geçmiş bağlantılar korunur                                       |
+| POST   | `/api/ai/labels/scan`  | `{ "transactions": [SNAPSHOT] }` → `{ "suggestions": [SUGGESTION] }`; kayıt yazmaz |
+| POST   | `/api/ai/labels/apply` | `{ "suggestions": [SUGGESTION] }` → `{ "updated": 3 }`; yalnız etiketler değişir   |
+
+Etiket biçimi `{ id, name, description, archived, createdAt, updatedAt }` olur. Ad 1–80, isteğe bağlı açıklama en fazla 500 karakterdir. Etkin adlar Türkçe büyük/küçük harf ve boşluk açısından benzersizdir. Arşivlenen etiket yeni atamalarda kullanılamaz; mevcut bağlantısı değişmeden bırakılabilir. Kopyalanan işlemde arşivlenmiş etiket kaldırılır. Kategori alanı etiketlerden bağımsızdır.
+
+`SNAPSHOT` biçimi `{ "transactionId": "...", "transactionUpdatedAt": "...", "previousLabelId": null }`; `SUGGESTION` aynı alanları ve önerilen `"labelId": "..."` veya `null` içerir. Tarama en fazla 50 etkin işlemi ve 200 etkin etiket tanımını kabul eder. Etkin etiket yoksa sağlayıcı çağrılmaz. Sağlayıcı yalnız açıklama, kategori, karşı taraf ve not alanlarını, etiket adları/açıklamalarıyla görür. İşlem ve etiket kimlikleri isteğe özel referanslardır; tutarlar, bakiyeler, hesaplar, tarihler ve önceki etiketler gönderilmez. Bilinmeyen, eksik veya tekrarlanan sağlayıcı referansları reddedilir. Uygun eşleşme yoksa öneri `null` olur.
+
+Uygulama en fazla 5.000 öneri kabul eder; gövde sınırı yalnız bu uçta 2mb'dir. Her işlemin mevcut zaman damgası/önceki etiketi ve hedef etiketin etkinliği yeniden doğrulanır. Arada değişen veya silinen bir işlem, geçersiz/arşivlenmiş etiket ya da tekrarlanan işlem varsa hiçbir değişiklik yazılmaz. Tutar, kategori, açıklama, hesap bağlantıları ve finans toplamları korunur. Tarayıcı tüm grupları tamamladıktan sonra değişiklikleri kullanıcıya gösterir ve ayrıca uygulama onayı ister; hata veya iptal durumunda kısmi kayıt yapılmaz.
+
+Yeni AI planında `transaction.data.labelId` yalnız etkin katalogdan seçilebilir. Sunucunun etiket doğrulama sorunları `labelIssues: [{ "key": "transaction_key", "message": "..." }]` içinde gelir. Etiket yerel olarak düzeltilince yalnız ilgili etiket sorunu temizlenir; `certain` ve finansal `issues` korunur. Onay sunucusu istemcinin sorun metadatasına güvenmeden gerçek etiket kimliklerini yeniden doğrular. Yeni kayıt yorumlamasında geçmiş işlem alanları gönderilmez.
 
 ## OpenAI ayarları
 
@@ -127,7 +147,7 @@ Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, i
 | PATCH  | `/api/settings/ai`      | `{ "apiKey": "...", "model": "gpt-5.4-mini" }` → aynı durum biçimi                 |
 | POST   | `/api/settings/ai/test` | Model erişimini test eder → `{ "ok": true, "provider": "openai", "model": "..." }` |
 
-Sunucu modunda bu uçlar yönetici oturumu ve mutasyonlarda tam Origin ister. Anahtar hiçbir yanıtta dönmez. PATCH en az bir alan ister; `apiKey` gönderilmezse mevcut anahtar korunur. Model Responses/Structured Outputs desteklemelidir. Model erişimi testi `/v1/models/{model}` kullanır; finans notu göndermez. Yorumlama isteği not ve sınırlı hesap/borç referanslarını gönderir; bütün defter/bakiyeler gönderilmez.
+Sunucu modunda bu uçlar yönetici oturumu ve mutasyonlarda tam Origin ister. Anahtar hiçbir yanıtta dönmez. PATCH en az bir alan ister; `apiKey` gönderilmezse mevcut anahtar korunur. Model Responses/Structured Outputs desteklemelidir. Model erişimi testi `/v1/models/{model}` kullanır; finans notu göndermez. Yeni kayıt yorumlama isteği not, sınırlı kayıt referansları ve etkin etiket tanımlarını gönderir; geçmiş defter/bakiyeler gönderilmez. Ayrı etiket taraması, yukarıda açıklanan mevcut işlem metin alanlarını gönderir.
 
 ## Hesaplar, borçlar, düzenli yükümlülükler ve abonelikler
 

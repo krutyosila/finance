@@ -2,8 +2,8 @@ import express, { type NextFunction, type Request, type Response } from 'express
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { FinanceService } from './core/service';
-import type { TransactionFilter } from '../shared/types';
+import { LabelScanConflictError, type FinanceService } from './core/service';
+import type { LabelScanSuggestion, TransactionFilter } from '../shared/types';
 import { backupDatabase, exportFinancialState } from './maintenance';
 import { AuthService, AuthError, parsePublicURL, SESSION_COOKIE, sessionCookie } from './auth';
 import { AiSettingsService } from './ai/settings';
@@ -11,6 +11,7 @@ import { AiError } from './ai/errors';
 import { OpenAiInterpreter, type AiInterpreter } from './ai/client';
 import { AiEntryService } from './ai/entry';
 import { AiPlanService } from './ai/plan';
+import { AiLabelScanService } from './ai/label-scan';
 import { registerSettingsRoutes } from './settings-routes';
 
 const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -86,6 +87,7 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
   const interpreter = options.aiInterpreter ?? new OpenAiInterpreter(aiSettings);
   const ai = new AiEntryService(service, interpreter);
   const plans = new AiPlanService(service, interpreter);
+  const labelScans = new AiLabelScanService(service, interpreter);
   const authorizeAi = (req: Request) => {
     if (auth && !auth.session(sessionCookie(req.headers.cookie)))
       throw new AuthError('Oturumunuz sona erdi. Devam etmek için tekrar giriş yapın.', 401);
@@ -151,7 +153,11 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     }
     next();
   });
-  app.use(express.json({ limit: '256kb' }));
+  const json = express.json({ limit: '256kb' });
+  const labelApplyJson = express.json({ limit: '2mb' });
+  app.use((req, res, next) =>
+    (req.path === '/api/ai/labels/apply' ? labelApplyJson : json)(req, res, next),
+  );
   app.get('/api/health', (_req, res) => res.json({ status: 'ok', local: !publicURL }));
   app.get('/api/auth/session', (req, res) => {
     if (auth) auth.checkSessionRate(req.ip ?? req.socket.remoteAddress ?? 'unknown');
@@ -212,6 +218,14 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     res.json(service.getContext(period(req))),
   );
   registerSettingsRoutes(app, auth, aiSettings);
+  app.get('/api/labels', (_req, res) => res.json(service.listLabels(true)));
+  app.post('/api/labels', (req, res) =>
+    res.status(201).json(service.createLabel(body(req) as never)),
+  );
+  app.patch('/api/labels/:id', (req, res) =>
+    res.json(service.updateLabel(req.params.id, body(req))),
+  );
+  app.delete('/api/labels/:id', (req, res) => res.json(service.archiveLabel(req.params.id)));
   app.get('/api/transactions', (req, res) => {
     const filter: TransactionFilter = {};
     for (const key of [
@@ -219,6 +233,7 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
       'type',
       'currency',
       'category',
+      'labelId',
       'accountId',
       'from',
       'to',
@@ -266,10 +281,21 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     authorizeAi(req);
     res.json(result);
   });
+  app.post('/api/ai/labels/scan', async (req, res) => {
+    const result = await labelScans.preview(body(req));
+    authorizeAi(req);
+    res.json(result);
+  });
   app.post('/api/ai/entry/confirm', (req, res) => {
     const input = body(req);
     const result = plans.confirm(input.plan, input.requestId, () => authorizeAi(req));
     res.status(result.saved ? 201 : 200).json(result);
+  });
+  app.post('/api/ai/labels/apply', (req, res) => {
+    const input = body(req);
+    authorizeAi(req);
+    const updated = service.applyLabelScan(input.suggestions as LabelScanSuggestion[]);
+    res.json({ updated: updated.length });
   });
 
   app.get('/api/accounts', (_req, res) => res.json(service.listAccounts()));
@@ -342,23 +368,32 @@ export function createApp(service: FinanceService, options: AppOptions = {}) {
     app.get(/^\/(?!api(?:\/|$)).*/, (_req, res) => res.sendFile(resolve(dist, 'index.html')));
   }
   app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    const oversized =
+      typeof error === 'object' &&
+      error !== null &&
+      'type' in error &&
+      error.type === 'entity.too.large';
     const raw = error instanceof Error ? error.message : 'İstek tamamlanamadı.';
-    const message =
-      error instanceof Error && error.name === 'ZodError'
+    const message = oversized
+      ? 'İstek çok büyük. Daha az kayıtla yeniden deneyin.'
+      : error instanceof Error && error.name === 'ZodError'
         ? 'Alanları kontrol edin: zorunlu alan, tür veya değer geçersiz.'
         : error instanceof SyntaxError
           ? 'JSON isteği okunamadı.'
           : raw;
     if (error instanceof AuthError && error.retryAfter)
       res.setHeader('Retry-After', String(error.retryAfter));
-    const status =
-      error instanceof AuthError || error instanceof AiError
-        ? error.statusCode
-        : /not found|does not exist|bulunamadı|mevcut değil/i.test(message)
-          ? 404
-          : /running|active API|Stop the|çalışıyor|uygulamayı durdur/i.test(message)
-            ? 409
-            : 400;
+    const status = oversized
+      ? 413
+      : error instanceof LabelScanConflictError
+        ? 409
+        : error instanceof AuthError || error instanceof AiError
+          ? error.statusCode
+          : /not found|does not exist|bulunamadı|mevcut değil/i.test(message)
+            ? 404
+            : /running|active API|Stop the|çalışıyor|uygulamayı durdur/i.test(message)
+              ? 409
+              : 400;
     res.status(status).json({ error: message });
   });
   return app;

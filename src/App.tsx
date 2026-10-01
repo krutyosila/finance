@@ -406,7 +406,7 @@ export function App() {
         <main id="main-content" className="main-content" tabIndex={-1}>
           <OfflineBanner />
           {page === 'Ayarlar' ? (
-            <Settings />
+            <Settings onLabelsChanged={() => setRevision((value) => value + 1)} />
           ) : resource.error ? (
             <div className="connection-error">
               <Database size={34} />

@@ -26,6 +26,7 @@ export function openDatabase(path = resolve(PROJECT_ROOT, 'data/finance.sqlite')
   for (const [version, file] of [
     [1, '0001_initial.sql'],
     [2, '0002_ai_entry_receipts.sql'],
+    [3, '0003_labels.sql'],
   ] as const) {
     const migration = sqlite
       .prepare('SELECT version FROM schema_migrations WHERE version=?')

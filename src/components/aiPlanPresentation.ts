@@ -2,6 +2,7 @@ import type {
   AiPlan,
   AiRecordDraft,
   AiRecordKind,
+  CatalogLabel,
   Currency,
   FinancialContext,
 } from '../../shared/types';
@@ -18,9 +19,17 @@ export function canConfirmPlan(plan: AiPlan) {
   return (
     plan.certain &&
     !plan.issues.length &&
+    !plan.labelIssues?.length &&
     plan.items.length > 0 &&
     plan.items.length <= 25 &&
     plan.text.length <= 12000
+  );
+}
+export function planLabelsAvailable(plan: AiPlan, labels: CatalogLabel[]) {
+  const active = new Set(labels.filter((label) => !label.archived).map((label) => label.id));
+  return plan.items.every(
+    (item) =>
+      item.kind !== 'transaction' || item.data.labelId == null || active.has(item.data.labelId),
   );
 }
 export function appendPlanFollowUp(plan: AiPlan, followUp: string) {
@@ -28,6 +37,20 @@ export function appendPlanFollowUp(plan: AiPlan, followUp: string) {
   if (text.length > 12000)
     throw new Error('Toplam not 12.000 karakteri aşamaz. Daha kısa bir ek bilgi yazın.');
   return text;
+}
+export function changePlanLabel(plan: AiPlan, index: number, labelId: string | null): AiPlan {
+  if (plan.items[index]?.kind !== 'transaction') return plan;
+  return {
+    ...plan,
+    ...(plan.labelIssues
+      ? { labelIssues: plan.labelIssues.filter((issue) => issue.key !== plan.items[index].key) }
+      : {}),
+    items: plan.items.map((item, position) =>
+      position === index && item.kind === 'transaction'
+        ? { ...item, data: { ...item.data, labelId } }
+        : item,
+    ),
+  };
 }
 const fieldNames: Record<string, string> = {
   name: 'Ad',
@@ -54,6 +77,7 @@ const fieldNames: Record<string, string> = {
   amountTRY: 'Gerçek TRY tutarı',
   exchangeRate: 'TRY dönüşüm kuru',
   category: 'Kategori',
+  labelId: 'Etiket',
   notes: 'Notlar',
   owner: 'Hesap sahibi',
   counterparty: 'Karşı taraf',
@@ -113,7 +137,12 @@ export function describeAiItem(item: AiRecordDraft, plan: AiPlan, context: Finan
   for (const [field, value] of Object.entries(data)) {
     if (value === undefined || value === null || value === '') continue;
     let label = String(value);
-    if (field.endsWith('Id')) label = relation(label, field, plan, context);
+    if (field === 'labelId') {
+      const selected = context.labels?.find((item) => item.id === value);
+      label = selected
+        ? `${selected.name}${selected.archived ? ' (arşivlenmiş)' : ''}`
+        : 'Etiket bulunamadı; yeniden seçin';
+    } else if (field.endsWith('Id')) label = relation(label, field, plan, context);
     else if (moneyFields.has(field)) {
       const destination =
         field === 'destinationAmount' && typeof data.destinationAccountId === 'string'

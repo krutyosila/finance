@@ -18,7 +18,11 @@ import { AuthError } from '../auth';
 
 import { PLAN_FIELDS } from './plan-schema';
 import { prepareAccountChain } from './account-chain';
-import { AI_REFERENCE_KINDS as referenceKinds, prepareAiReferences } from './references';
+import {
+  AI_REFERENCE_KINDS as referenceKinds,
+  LABEL_REFERENCE_ISSUE,
+  prepareAiReferences,
+} from './references';
 const kindLabels: Record<AiRecordKind, string> = {
   transaction: 'İşlem',
   account: 'Hesap',
@@ -55,6 +59,21 @@ const envelope = z
     text: z.string().trim().min(1).max(12000),
     certain: z.boolean(),
     issues: z.array(z.string().min(1).max(500)).max(50),
+    labelIssues: z
+      .array(
+        z
+          .object({
+            key: z
+              .string()
+              .min(1)
+              .max(80)
+              .regex(/^[a-zA-Z0-9_-]+$/),
+            message: z.string().min(1).max(500),
+          })
+          .strict(),
+      )
+      .max(25)
+      .optional(),
     items: z
       .array(
         z
@@ -131,7 +150,12 @@ export class AiPlanService {
     const obligations = this.finance
       .listObligations()
       .map(({ id, name, currency }) => ({ id, name, currency }));
-    if ([accounts, debts, subscriptions, obligations].some((records) => records.length > 200))
+    const labels = this.finance
+      .listLabels()
+      .map(({ id, name, description }) => ({ id, name, description }));
+    if (
+      [accounts, debts, subscriptions, obligations, labels].some((records) => records.length > 200)
+    )
       throw new AiError('AI referans sınırı aşıldı.', 400);
     const current = this.finance.listCycles().find((cycle) => !cycle.end);
     return {
@@ -139,6 +163,7 @@ export class AiPlanService {
       debts,
       subscriptions,
       obligations,
+      labels,
       currentCycle: current ? { id: current.id, name: current.name } : null,
       date: new Intl.DateTimeFormat('sv-SE', {
         timeZone,
@@ -148,6 +173,21 @@ export class AiPlanService {
       }).format(new Date()),
       timeZone,
     };
+  }
+  private validateLabels(plan: AiPlan, preserveSnapshot = false): AiPlan {
+    const active = new Set(this.finance.listLabels().map((label) => label.id));
+    const labelIssues = new Map(
+      (preserveSnapshot ? (plan.labelIssues ?? []) : []).map((issue) => [issue.key, issue]),
+    );
+    for (const item of plan.items) {
+      if (
+        item.kind === 'transaction' &&
+        item.data.labelId != null &&
+        !active.has(item.data.labelId)
+      )
+        labelIssues.set(item.key, { key: item.key, message: LABEL_REFERENCE_ISSUE });
+    }
+    return { ...plan, labelIssues: [...labelIssues.values()] };
   }
   private invalid(plan: AiPlan, error: unknown): AiPlan {
     if (error instanceof AiError || error instanceof AuthError) throw error;
@@ -209,11 +249,22 @@ export class AiPlanService {
         text: value.trim(),
       }),
     );
-    plan = prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts());
+    plan = this.validateLabels(
+      prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts()),
+      true,
+    );
     if (!plan.certain || plan.issues.length) return { ...plan, certain: false };
     try {
       this.finance.sqlite.transaction(() => {
-        this.execute(plan);
+        const invalidLabels = new Set(plan.labelIssues?.map((issue) => issue.key));
+        this.execute({
+          ...plan,
+          items: plan.items.map((item) =>
+            item.kind === 'transaction' && invalidLabels.has(item.key)
+              ? { ...item, data: { ...item.data, labelId: null } }
+              : item,
+          ),
+        });
         throw rollback;
       })();
     } catch (error) {
@@ -246,12 +297,12 @@ export class AiPlanService {
               throw new AiError('Bu istek kimliği farklı bir plan için kullanılmış.', 409);
             return JSON.parse(row.result_json) as AiPlanResult;
           }
-          confirmation = prepareAccountChain(
-            this.scheduleDefaults(plan),
-            this.finance.listAccounts(),
+          confirmation = this.validateLabels(
+            prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts()),
           );
           if (!confirmation.certain || confirmation.issues.length)
             return { saved: false, confirmation: { ...confirmation, certain: false } };
+          if (confirmation.labelIssues?.length) return { saved: false, confirmation };
           const result: AiPlanResult = {
             saved: true,
             records: this.execute(confirmation),
@@ -378,6 +429,7 @@ export class AiPlanService {
         if (data[field] == null) continue;
         if (typeof data[field] !== 'string') throw Error('Referans kimliği geçersiz.');
         const value = data[field] as string;
+        if (expected === 'label' && value.startsWith('@')) throw Error(LABEL_REFERENCE_ISSUE);
         if (value.startsWith('@')) {
           const record = records.get(value.slice(1))!;
           if (expected === 'debt' && record.kind === 'account') {
@@ -396,9 +448,15 @@ export class AiPlanService {
               ? this.finance.listDebts()
               : expected === 'obligation'
                 ? this.finance.listObligations()
-                : this.finance.listSubscriptions();
+                : expected === 'label'
+                  ? this.finance.listLabels()
+                  : this.finance.listSubscriptions();
         if (!existing.some((entity) => entity.id === data[field]))
-          throw Error('Referans bulunamadı veya türü eşleşmiyor.');
+          throw Error(
+            expected === 'label'
+              ? LABEL_REFERENCE_ISSUE
+              : 'Referans bulunamadı veya türü eşleşmiyor.',
+          );
       }
       let result: { id: string };
       switch (item.kind) {

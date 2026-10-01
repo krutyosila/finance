@@ -4,8 +4,11 @@ import {
   canConfirmPlan,
   describeAiItem,
   appendPlanFollowUp,
+  changePlanLabel,
+  planLabelsAvailable,
 } from '../src/components/aiPlanPresentation';
-import type { AiPlan, FinancialContext } from '../shared/types';
+import type { AiPlan, CatalogLabel, FinancialContext, Transaction } from '../shared/types';
+import { labelScanBatches, scanLabelsAvailable } from '../src/components/labelScanBatch';
 const context = {
   accounts: [{ id: 'existing', name: 'Maaş hesabı' }],
   debts: [],
@@ -34,6 +37,165 @@ const plan: AiPlan = {
   ],
 };
 describe('AI plan presentation', () => {
+  it('blocks unresolved or archived AI targets until a current active label or none is selected', () => {
+    const label = (id: string, archived = false): CatalogLabel => ({
+      id,
+      name: id,
+      description: null,
+      archived,
+      createdAt: '2026-10-01T12:00:00Z',
+      updatedAt: '2026-10-01T12:00:00Z',
+    });
+    const newLabel = changePlanLabel(plan, 1, 'created-after-context');
+    expect(planLabelsAvailable(newLabel, [])).toBe(false);
+    expect(planLabelsAvailable(newLabel, [label('created-after-context')])).toBe(true);
+    expect(planLabelsAvailable(newLabel, [label('created-after-context', true)])).toBe(false);
+    expect(planLabelsAvailable(changePlanLabel(newLabel, 1, null), [])).toBe(true);
+    expect(planLabelsAvailable(plan, [])).toBe(true);
+  });
+  it('validates scan targets against the refreshed active catalog, allowing explicit label removal', () => {
+    const label = (id: string, archived = false): CatalogLabel => ({
+      id,
+      name: id,
+      description: null,
+      archived,
+      createdAt: '2026-10-01T12:00:00Z',
+      updatedAt: '2026-10-01T12:00:00Z',
+    });
+    const suggestion = {
+      transactionId: 'transaction',
+      transactionUpdatedAt: '2026-10-01T12:00:00Z',
+      previousLabelId: 'old',
+      labelId: 'added-during-scan',
+    };
+    expect(scanLabelsAvailable([suggestion], [label('old')])).toBe(false);
+    expect(scanLabelsAvailable([suggestion], [label('old'), label('added-during-scan')])).toBe(
+      true,
+    );
+    expect(scanLabelsAvailable([suggestion], [label('added-during-scan', true)])).toBe(false);
+    expect(scanLabelsAvailable([{ ...suggestion, labelId: null }], [])).toBe(true);
+  });
+  it('batches existing transaction snapshots by count and complete escaped text without clipping', () => {
+    const records = Array.from({ length: 51 }, (_, index) => ({
+      id: `transaction-${index}`,
+      updatedAt: '2026-10-01T12:00:00.000Z',
+      labelId: index === 0 ? 'old-label' : null,
+      description: 'Market',
+      category: 'Gıda',
+      counterparty: null,
+      notes: null,
+    })) as Transaction[];
+    const normal = labelScanBatches(records);
+    expect(normal.map((batch) => batch.length)).toEqual([50, 1]);
+    expect(normal[0][0]).toEqual({
+      transactionId: records[0].id,
+      transactionUpdatedAt: records[0].updatedAt,
+      previousLabelId: 'old-label',
+    });
+    expect(normal[0][1].previousLabelId).toBeNull();
+    const long = records.map((record) => ({
+      ...record,
+      description: 'a'.repeat(500),
+      category: 'b'.repeat(120),
+      counterparty: 'c'.repeat(200),
+      notes: '\\"'.repeat(1000),
+    }));
+    const bounded = labelScanBatches(long);
+    expect(bounded.length).toBeGreaterThan(2);
+    expect(bounded.every((batch) => batch.length <= 50)).toBe(true);
+    expect(bounded.flat().map((item) => item.transactionId)).toEqual(long.map((item) => item.id));
+    for (const batch of bounded) {
+      const rows = batch.map((snapshot) =>
+        long.find((record) => record.id === snapshot.transactionId)!,
+      );
+      expect(
+        JSON.stringify(
+          rows.map(({ description, category, counterparty, notes }) => ({
+            description,
+            category,
+            counterparty,
+            notes,
+          })),
+        ).length,
+      ).toBeLessThan(100000);
+    }
+    expect(long[0].notes.length).toBe(2000);
+    expect(() => labelScanBatches([{ ...records[0], notes: 'a'.repeat(100001) }])).toThrow(
+      'sınırını',
+    );
+    expect(labelScanBatches([])).toEqual([]);
+  });
+  it('resolves transaction labels from the label catalog rather than an account with the same id', () => {
+    const labels = {
+      ...context,
+      labels: [
+        { id: 'existing', name: 'Market alışverişi', archived: false },
+        { id: 'archived', name: 'Eski etiket', archived: true },
+      ],
+    } as FinancialContext;
+    const item = {
+      key: 'labelled',
+      kind: 'transaction' as const,
+      data: { labelId: 'existing' },
+    };
+    expect(describeAiItem(item, plan, labels).fields).toContainEqual([
+      'Etiket',
+      'Market alışverişi',
+    ]);
+    expect(
+      describeAiItem({ ...item, data: { labelId: 'archived' } }, plan, labels).fields,
+    ).toContainEqual(['Etiket', 'Eski etiket (arşivlenmiş)']);
+    const unknown = describeAiItem({ ...item, data: { labelId: 'missing-label' } }, plan, labels);
+    expect(unknown.fields).toContainEqual(['Etiket', 'Etiket bulunamadı; yeniden seçin']);
+    expect(JSON.stringify(unknown)).not.toContain('missing-label');
+  });
+  it('changes one transaction label locally while preserving certainty, issues and financial fields', () => {
+    const original = {
+      ...plan,
+      certain: false,
+      issues: ['Tutarı netleştirin'],
+      items: [...plan.items],
+    };
+    const changed = changePlanLabel(original, 1, 'label-market');
+    expect(changed.items[1].data).toEqual({ ...original.items[1].data, labelId: 'label-market' });
+    expect(changed.items[0]).toBe(original.items[0]);
+    expect(changed.certain).toBe(false);
+    expect(changed.issues).toBe(original.issues);
+    expect(changed.text).toBe(original.text);
+    expect(original.items[1].data).not.toHaveProperty('labelId');
+    expect(changePlanLabel(changed, 1, null).items[1].data).toEqual({
+      ...original.items[1].data,
+      labelId: null,
+    });
+    expect(changePlanLabel(original, 0, 'label-market')).toBe(original);
+  });
+  it('clears only the corrected transaction label issue and keeps other confirmation blockers', () => {
+    const pending = {
+      ...plan,
+      labelIssues: [
+        { key: 'pay', message: 'Etiket artık etkin değil.' },
+        { key: 'other', message: 'Başka etiket bulunamadı.' },
+      ],
+    };
+    expect(canConfirmPlan(pending)).toBe(false);
+    const corrected = changePlanLabel(pending, 1, null);
+    expect(corrected.certain).toBe(true);
+    expect(corrected.labelIssues).toEqual([pending.labelIssues[1]]);
+    expect(canConfirmPlan(corrected)).toBe(false);
+    expect(
+      canConfirmPlan(
+        changePlanLabel({ ...pending, labelIssues: [pending.labelIssues[0]] }, 1, null),
+      ),
+    ).toBe(true);
+    const unresolved = changePlanLabel(
+      { ...pending, certain: false, issues: ['Tutar belirsiz.'] },
+      1,
+      'valid-label',
+    );
+    expect(unresolved.issues).toEqual(['Tutar belirsiz.']);
+    expect(unresolved.certain).toBe(false);
+    expect(canConfirmPlan(unresolved)).toBe(false);
+  });
   it('names every supported kind in Turkish', () =>
     expect(Object.values(aiKindNames)).toEqual([
       'İşlem',
