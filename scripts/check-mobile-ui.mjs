@@ -572,6 +572,86 @@ async function verifyVisualViewportKeyboard(page, mobile) {
   }
 }
 
+async function mobileDockGeometry(page) {
+  return page.evaluate(() => {
+    const nav = document.querySelector('.mobile-bottom-nav');
+    const fab = nav.querySelector('.quick-add-fab');
+    return {
+      nav: nav.getBoundingClientRect().toJSON(),
+      fab: fab.getBoundingClientRect().toJSON(),
+      plusGlyph: fab.querySelector('svg').getBoundingClientRect().toJSON(),
+      links: [...nav.querySelectorAll('a')].map((link) => ({
+        ...link.getBoundingClientRect().toJSON(),
+        radius: getComputedStyle(link).borderRadius,
+        glyph: link.querySelector('svg').getBoundingClientRect().toJSON(),
+      })),
+    };
+  });
+}
+
+function checkMobileDockGeometry(dock, size, safe = { left: 0, right: 0, bottom: 0 }) {
+  const centerX = (size.width + safe.left - safe.right) / 2;
+  const midpoint = (box) => ({ x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 });
+  const near = (a, b) => Math.abs(a - b) <= 1;
+  const navCenter = midpoint(dock.nav);
+  const plusCenter = midpoint(dock.fab);
+  const availableWidth = size.width - 36 - safe.left - safe.right;
+  check(
+    near(dock.nav.width, Math.min(286, availableWidth)) &&
+      near(dock.nav.height, 60) &&
+      near(navCenter.x, centerX) &&
+      near(dock.nav.bottom, size.height - 22 - safe.bottom),
+    'compact 60px pill stays centered and reserves the approved bottom clearance',
+    { dock, size, safe },
+  );
+  check(
+    dock.links.length === 4 &&
+      dock.links.every(
+        (link) =>
+          link.width >= 44 &&
+          link.width <= 50.5 &&
+          near(link.width, link.height) &&
+          near(link.width, dock.links[0].width) &&
+          (availableWidth < 280 || near(link.width, 50)) &&
+          near(midpoint(link).y, navCenter.y) &&
+          link.radius === '50%' &&
+          near(link.glyph.width, 28) &&
+          near(link.glyph.height, 28),
+      ),
+    'four equal circular navigation targets keep 28px glyphs and at least44px touch areas',
+    dock,
+  );
+  check(
+    dock.fab.width >= 64 &&
+      dock.fab.width <= 68.5 &&
+      near(dock.fab.width, dock.fab.height) &&
+      (availableWidth < 256 || near(dock.fab.width, 68)) &&
+      near(plusCenter.x, navCenter.x) &&
+      near(plusCenter.y, navCenter.y) &&
+      dock.fab.top < dock.nav.top &&
+      dock.fab.bottom > dock.nav.bottom &&
+      near(dock.nav.top - dock.fab.top, dock.fab.bottom - dock.nav.bottom) &&
+      near(dock.plusGlyph.width, 32) &&
+      near(dock.plusGlyph.height, 32),
+    'larger central+ is centered in both axes with symmetric protrusion and a32px glyph',
+    dock,
+  );
+  check(
+    dock.links[0].left >= dock.nav.left &&
+      dock.links[3].right <= dock.nav.right &&
+      dock.links[0].right <= dock.links[1].left + 1 &&
+      dock.links[1].right <= dock.fab.left + 1 &&
+      dock.fab.right <= dock.links[2].left + 1 &&
+      dock.links[2].right <= dock.links[3].left + 1 &&
+      near((midpoint(dock.links[0]).x + midpoint(dock.links[3]).x) / 2, navCenter.x) &&
+      near((midpoint(dock.links[1]).x + midpoint(dock.links[2]).x) / 2, navCenter.x) &&
+      dock.fab.bottom <= size.height - 18 - safe.bottom + 1 &&
+      dock.fab.bottom >= size.height - 20 - safe.bottom - 1,
+    'symmetric menu targets do not overlap and the lowest+edge keeps18–20px screen clearance',
+    { dock, size, safe },
+  );
+}
+
 async function verifyMobileDockViewport(page, mobile) {
   if (!mobile) return;
   await go(page, 'dashboard');
@@ -608,37 +688,39 @@ async function verifyMobileDockViewport(page, mobile) {
     });
     const keyboard = await dock(320, 100);
     check(
-      Math.abs(keyboard.nav.bottom - 402) <= 2 &&
+      Math.abs(keyboard.nav.bottom - 398) <= 2 &&
         Math.abs((keyboard.fab.left + keyboard.fab.right) / 2 - page.viewportSize().width / 2) <=
           2 &&
-        keyboard.fab.top >= keyboard.nav.top &&
-        keyboard.fab.bottom <= keyboard.nav.bottom,
+        Math.abs(
+          (keyboard.fab.top + keyboard.fab.bottom - keyboard.nav.top - keyboard.nav.bottom) / 2,
+        ) <= 1 &&
+        Math.abs(keyboard.fab.bottom - 402) <= 2,
       'mobile dock follows the visible keyboard viewport independently of layout height',
       keyboard,
     );
     const restored = await dock(layoutHeight - 60, 30);
     check(
-      Math.abs(restored.nav.bottom - (layoutHeight - 48)) <= 2,
+      Math.abs(restored.nav.bottom - (layoutHeight - 52)) <= 2,
       'mobile dock returns to the visible bottom after keyboard dismissal and toolbar changes',
       restored,
     );
     check(restored.innerHeight === layoutHeight, 'dock check retains the layout viewport');
     const focusedDismissal = await dock(layoutHeight, 100);
     check(
-      Math.abs(focusedDismissal.nav.bottom - (layoutHeight - 18)) <= 2,
+      Math.abs(focusedDismissal.nav.bottom - (layoutHeight - 22)) <= 2,
       'keyboard dismissal clears the old pan while the input remains focused',
       focusedDismissal,
     );
     await page.evaluate(() => document.getElementById('viewport-qa-input').remove());
     const loginDismissal = await dock(Math.max(100, layoutHeight - 315), 0);
     check(
-      Math.abs(loginDismissal.nav.bottom - (layoutHeight - 18)) <= 2,
+      Math.abs(loginDismissal.nav.bottom - (layoutHeight - 22)) <= 2,
       'unmounting a focused login field recovers stale keyboard-height geometry',
       loginDismissal,
     );
     const zoomed = await dock(layoutHeight / 2, 100, 2);
     check(
-      Math.abs(zoomed.nav.bottom - (layoutHeight - 18)) <= 2,
+      Math.abs(zoomed.nav.bottom - (layoutHeight - 22)) <= 2,
       'pinch zoom retains native fixed positioning instead of shrinking the navigation',
       zoomed,
     );
@@ -1006,6 +1088,11 @@ try {
     }
     await step('entry', () => verifyEntry(page, mobile));
     await step('forms', () => verifyForms(page, mobile));
+    if (mobile && !baseline)
+      await step('mobile-dock-geometry', async () => {
+        await go(page, 'dashboard');
+        checkMobileDockGeometry(await mobileDockGeometry(page), size);
+      });
     if (!baseline) await step('mobile-dock-viewport', () => verifyMobileDockViewport(page, mobile));
     if (!baseline && size.width === 390 && size.height === 844)
       await step('dock-breakpoint-focus', () => verifyDockBreakpointFocus(page));
@@ -1081,19 +1168,17 @@ try {
         });
         check(
           safe.paddingTop >= 28 &&
-            safe.nav.bottom <= size.height - 18 - 24 + 1 &&
+            safe.nav.bottom <= size.height - 22 - 24 + 1 &&
             safe.nav.left >= 18 + 18 - 1 &&
             safe.nav.right <= size.width - 18 - 18 + 1,
           'header and bottom navigation reserve simulated safe areas',
           safe,
         );
-        check(
-          Math.abs((safe.fab.left + safe.fab.right) / 2 - size.width / 2) <= 2 &&
-            safe.fab.top >= safe.nav.top &&
-            safe.fab.bottom <= safe.nav.bottom,
-          'AI + stays centered inside the floating dock and clears simulated cutouts',
-          safe,
-        );
+        checkMobileDockGeometry(await mobileDockGeometry(page), size, {
+          left: 18,
+          right: 18,
+          bottom: 24,
+        });
         await page.locator('.quick-add-fab').click();
         await modalFits(page, 'cutout modal', mobile);
         const padding = await page.locator('dialog[open]').evaluate((el) => {

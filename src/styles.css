@@ -3599,7 +3599,7 @@ table {
 @media (max-width: 900px), (max-width: 1100px) and (max-height: 500px) {
   :root {
     --page-gutter: 22px;
-    --mobile-nav-height: 68px;
+    --mobile-nav-height: 60px;
   }
   html {
     overscroll-behavior-y: none;
@@ -3659,38 +3659,55 @@ table {
     margin-right: 4px;
   }
   .mobile-bottom-nav {
+    --dock-plus-size: clamp(64px, calc(100vw - 224px - var(--safe-left) - var(--safe-right)), 68px);
+    --dock-side-padding: clamp(
+      3px,
+      calc((100vw - 278px - var(--safe-left) - var(--safe-right)) / 2),
+      5px
+    );
     position: fixed;
-    inset: auto calc(18px + var(--safe-right)) calc(18px + var(--safe-bottom))
+    inset: auto calc(18px + var(--safe-right)) calc(22px + var(--safe-bottom))
       calc(18px + var(--safe-left));
+    width: min(286px, calc(100% - 36px - var(--safe-left) - var(--safe-right)));
+    margin-inline: auto;
     z-index: 35;
     display: grid;
-    grid-template-columns: repeat(2, minmax(44px, 1fr)) 50px repeat(2, minmax(44px, 1fr));
+    grid-template-columns:
+      repeat(2, minmax(44px, 50px)) var(--dock-plus-size)
+      repeat(2, minmax(44px, 50px));
+    grid-template-rows: minmax(0, 1fr);
+    justify-content: space-between;
     align-items: center;
-    min-height: var(--mobile-nav-height);
-    padding: 8px;
-    gap: 2px;
+    height: var(--mobile-nav-height);
+    padding: 0 var(--dock-side-padding);
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: 36px;
+    border-radius: 32px;
     box-shadow: 0 8px 28px #12233118;
   }
   .visual-viewport-dock .mobile-bottom-nav {
-    top: calc(var(--mobile-dock-bottom) - 18px - var(--safe-bottom));
+    top: calc(var(--mobile-dock-bottom) - 22px - var(--safe-bottom));
     bottom: auto;
     transform: translateY(-100%);
   }
   .mobile-bottom-nav a {
-    min-width: 0;
-    min-height: 48px;
+    width: 100%;
+    aspect-ratio: 1;
+    min-width: 44px;
+    min-height: 44px;
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 5px 2px;
-    border-radius: 24px;
+    padding: 0;
+    border-radius: 50%;
     color: #62727d;
     font-size: 11px;
     line-height: 1.3;
     text-align: center;
+  }
+  .mobile-bottom-nav a svg {
+    width: 28px;
+    height: 28px;
   }
   .mobile-bottom-nav a.active {
     color: var(--teal);
@@ -3703,9 +3720,13 @@ table {
   .mobile-bottom-nav .quick-add-fab {
     position: static;
     justify-self: center;
-    width: 50px;
-    height: 50px;
+    width: var(--dock-plus-size);
+    height: var(--dock-plus-size);
     box-shadow: 0 3px 10px #277e7824;
+  }
+  .mobile-bottom-nav .quick-add-fab svg {
+    width: 32px;
+    height: 32px;
   }
   .toast {
     right: calc(16px + var(--safe-right));
