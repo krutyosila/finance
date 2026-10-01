@@ -170,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (checking)
     return (
       <div className="auth-checking">
-        <img src="/icons/icon.svg" alt="Kasa" width={62} height={62} />
+        <img src="/icons/kasa-favicon-v2.svg" alt="Kasa" width={62} height={62} />
         <Loading text="Oturumunuz doğrulanıyor…" />
       </div>
     );
@@ -205,7 +205,7 @@ function AuthConnection({ error, retry }: { error: string; retry: () => void }) 
   const { online } = usePwa();
   return (
     <div className="auth-connection">
-      <img src="/icons/icon.svg" alt="Kasa" width={62} height={62} />
+      <img src="/icons/kasa-favicon-v2.svg" alt="Kasa" width={62} height={62} />
       <WifiOff size={27} />
       <h1>Bağlantı gerekli.</h1>
       <p>

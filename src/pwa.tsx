@@ -85,7 +85,13 @@ export function InstallPanel({ compact = false }: { compact?: boolean }) {
       className={`install-panel ${compact ? 'install-panel-compact' : ''}`}
       aria-label="Kasa uygulama kurulumu"
     >
-      <img className="install-icon" src="/icons/icon.svg" alt="" width={34} height={34} />
+      <img
+        className="install-icon"
+        src="/icons/kasa-favicon-v2.svg"
+        alt=""
+        width={34}
+        height={34}
+      />
       <div>
         <h3>{installed ? 'Kasa uygulaması kurulu' : 'Kasa her ekranda yanınızda'}</h3>
         <p>

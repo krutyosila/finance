@@ -1,27 +1,13 @@
-const CACHE_NAME = 'kasa-static-v2';
+// Legacy Still worker from commit 77e20ee, retained for installation-upgrade regressions.
+const CACHE_NAME = 'still-static-v2';
 const PUBLIC_FILES = new Set([
   '/offline.html',
   '/manifest.webmanifest',
-  '/kasa-v2.webmanifest',
-  '/brand/kasa-mark.svg',
-  '/brand/kasa-mark-mint.svg',
-  '/brand/kasa-logo.svg',
-  '/brand/kasa-logo-light.svg',
-  '/favicon.ico',
-  '/kasa-favicon-v2.ico',
-  '/icons/favicon-32.png',
-  '/icons/kasa-favicon-32-v2.png',
-  '/icons/kasa-favicon-v2.svg',
   '/icons/icon.svg',
   '/icons/icon-192.png',
-  '/icons/kasa-icon-192-v2.png',
   '/icons/icon-512.png',
-  '/icons/kasa-icon-512-v2.png',
   '/icons/maskable-512.png',
-  '/icons/kasa-maskable-512-v2.png',
-  '/icons/maskable-icon.svg',
   '/icons/apple-touch-icon.png',
-  '/icons/kasa-apple-touch-icon-v2.png',
 ]);
 
 self.addEventListener('install', (event) => {
@@ -35,11 +21,7 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter(
-              (key) =>
-                (key.startsWith('still-static-') || key.startsWith('kasa-static-')) &&
-                key !== CACHE_NAME,
-            )
+            .filter((key) => key.startsWith('still-static-') && key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )

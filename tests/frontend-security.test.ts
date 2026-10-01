@@ -182,6 +182,133 @@ function worker({ offline = false, status = 200, redirected = false } = {}) {
 }
 
 describe('service worker privacy boundary', () => {
+  it('loads current installation metadata and Kasa icons while the legacy Still worker stays active', async () => {
+    const origin = 'https://finance.example';
+    const keyOf = (request: Request | string) =>
+      new URL(typeof request === 'string' ? request : request.url, origin).href;
+    const previousManifest = {
+      name: 'Still — Kişisel Finans',
+      short_name: 'Still',
+      icons: [
+        { src: '/icons/icon-192.png', sizes: '192x192', purpose: 'any' },
+        { src: '/icons/icon-512.png', sizes: '512x512', purpose: 'any' },
+        { src: '/icons/maskable-512.png', sizes: '512x512', purpose: 'maskable' },
+      ],
+    };
+    const previousFiles = new Map([
+      ['/manifest.webmanifest', JSON.stringify(previousManifest)],
+      ['/offline.html', 'Still offline page'],
+      ['/icons/icon.svg', 'Still SVG icon'],
+      ['/icons/icon-192.png', 'Still 192px icon'],
+      ['/icons/icon-512.png', 'Still 512px icon'],
+      ['/icons/maskable-512.png', 'Still maskable icon'],
+      ['/icons/apple-touch-icon.png', 'Still Apple icon'],
+    ]);
+    const previous = new Map(
+      [...previousFiles].map(([path, body]) => [keyOf(path), new Response(body)]),
+    );
+    const handlers = new Map<string, (event: any) => void>();
+    const claim = vi.fn(async () => undefined);
+    const skipWaiting = vi.fn(async () => undefined);
+    const fetchPublic = vi.fn(async (request: Request | string) => {
+      const path = new URL(keyOf(request)).pathname;
+      const file = new URL(path === '/' ? '../index.html' : `../public${path}`, import.meta.url);
+      return new Response(new Uint8Array(readFileSync(file)));
+    });
+    const open = vi.fn(async (name: string) => {
+      expect(name).toBe('still-static-v2');
+      return {
+        match: async (request: Request | string) => previous.get(keyOf(request))?.clone(),
+        put: async (request: Request | string, response: Response) => {
+          previous.set(keyOf(request), response);
+        },
+      };
+    });
+    vm.runInNewContext(
+      readFileSync(new URL('./fixtures/still-sw-v2.js', import.meta.url), 'utf8'),
+      {
+        self: {
+          location: { origin },
+          clients: { claim },
+          skipWaiting,
+          addEventListener: (name: string, handler: (event: any) => void) =>
+            handlers.set(name, handler),
+        },
+        caches: { open },
+        fetch: fetchPublic,
+        URL,
+      },
+    );
+    const request = async (path: string, navigation = false) => {
+      const request = new Request(keyOf(path));
+      if (navigation) Object.defineProperty(request, 'mode', { value: 'navigate' });
+      let response: Promise<Response> | undefined;
+      handlers.get('fetch')!({
+        request,
+        respondWith: (value: Promise<Response>) => {
+          response = value;
+        },
+      });
+      return response || fetchPublic(request);
+    };
+
+    const html = await (await request('/', true)).text();
+    const links = [...html.matchAll(/<link\b[^>]+>/g)].map(([tag]) => ({
+      rel: tag.match(/\brel="([^"]+)"/)?.[1],
+      href: tag.match(/\bhref="([^"]+)"/)?.[1],
+      type: tag.match(/\btype="([^"]+)"/)?.[1],
+    }));
+    const manifest = await (
+      await request(links.find((link) => link.rel === 'manifest')!.href!)
+    ).json();
+    const currentManifest = JSON.parse(
+      readFileSync(new URL('../public/manifest.webmanifest', import.meta.url), 'utf8'),
+    );
+    expect(manifest).toEqual(currentManifest);
+    for (const icon of manifest.icons) {
+      const expectedPath =
+        icon.purpose === 'maskable'
+          ? '/icons/maskable-512.png'
+          : `/icons/icon-${icon.sizes.split('x')[0]}.png`;
+      expect(Buffer.from(await (await request(icon.src)).arrayBuffer())).toEqual(
+        readFileSync(new URL(`../public${expectedPath}`, import.meta.url)),
+      );
+    }
+    const pageIcons = links.filter((link) => ['icon', 'apple-touch-icon'].includes(link.rel!));
+    expect(pageIcons).toHaveLength(4);
+    for (const icon of pageIcons) {
+      const expectedPath =
+        icon.rel === 'apple-touch-icon'
+          ? '/icons/apple-touch-icon.png'
+          : icon.type === 'image/x-icon'
+            ? '/favicon.ico'
+            : icon.type === 'image/png'
+              ? '/icons/favicon-32.png'
+              : '/icons/icon.svg';
+      expect(Buffer.from(await (await request(icon.href!)).arrayBuffer())).toEqual(
+        readFileSync(new URL(`../public${expectedPath}`, import.meta.url)),
+      );
+    }
+    for (const screen of ['../src/auth.tsx', '../src/pwa.tsx', '../public/offline.html']) {
+      const source = readFileSync(new URL(screen, import.meta.url), 'utf8');
+      const imageSources = [...source.matchAll(/<img\b[^>]*\bsrc="([^"]+)"[^>]*>/g)].map(
+        (match) => match[1],
+      );
+      expect(imageSources, `${screen} includes static images`).not.toHaveLength(0);
+      for (const src of imageSources) {
+        expect(
+          Buffer.from(await (await request(src)).arrayBuffer()),
+          `${screen} image ${src} receives current asset bytes`,
+        ).toEqual(readFileSync(new URL(`../public${src}`, import.meta.url)));
+      }
+    }
+    expect(await previous.get(keyOf('/manifest.webmanifest'))!.clone().json()).toEqual(
+      previousManifest,
+    );
+    expect(claim).not.toHaveBeenCalled();
+    expect(skipWaiting).not.toHaveBeenCalled();
+  });
+
   it('migrates Still and stale Kasa public caches while preserving unrelated caches and API requests', async () => {
     const previous = new Map([
       ['/manifest.webmanifest', new Response('old manifest')],
@@ -194,19 +321,28 @@ describe('service worker privacy boundary', () => {
       ['still-static-v0', new Map()],
       ['still-static-v1', previous],
       ['still-static-v2', new Map()],
-      ['kasa-static-v0', previousKasa],
-      ['kasa-static-v1', currentKasa],
+      ['kasa-static-v0', new Map()],
+      ['kasa-static-v1', previousKasa],
+      ['kasa-static-v2', currentKasa],
       ['other-app-static-v1', unrelated],
     ]);
     const publicContent = new Map([
       ['/manifest.webmanifest', 'new manifest'],
+      ['/kasa-v2.webmanifest', 'new manifest'],
       ['/offline.html', 'new offline page'],
       ['/brand/kasa-mark.svg', 'Kasa mark'],
       ['/brand/kasa-mark-mint.svg', 'Kasa mint mark'],
       ['/brand/kasa-logo.svg', 'Kasa logo'],
       ['/brand/kasa-logo-light.svg', 'Kasa light logo'],
       ['/favicon.ico', 'Kasa favicon'],
+      ['/kasa-favicon-v2.ico', 'versioned Kasa favicon'],
       ['/icons/favicon-32.png', 'Kasa small favicon'],
+      ['/icons/kasa-favicon-32-v2.png', 'versioned Kasa small favicon'],
+      ['/icons/kasa-favicon-v2.svg', 'versioned Kasa SVG favicon'],
+      ['/icons/kasa-icon-192-v2.png', 'versioned Kasa 192px icon'],
+      ['/icons/kasa-icon-512-v2.png', 'versioned Kasa 512px icon'],
+      ['/icons/kasa-maskable-512-v2.png', 'versioned Kasa maskable icon'],
+      ['/icons/kasa-apple-touch-icon-v2.png', 'versioned Kasa Apple icon'],
     ]);
     const handlers = new Map<string, (event: any) => void>();
     const keyOf = (request: Request | string) =>
@@ -276,8 +412,9 @@ describe('service worker privacy boundary', () => {
     expect(stored.has('still-static-v1')).toBe(false);
     expect(stored.has('still-static-v2')).toBe(false);
     expect(stored.has('kasa-static-v0')).toBe(false);
-    expect(stored.get('kasa-static-v1')).toBe(currentKasa);
-    expect([...stored.keys()].sort()).toEqual(['kasa-static-v1', 'other-app-static-v1']);
+    expect(stored.has('kasa-static-v1')).toBe(false);
+    expect(stored.get('kasa-static-v2')).toBe(currentKasa);
+    expect([...stored.keys()].sort()).toEqual(['kasa-static-v2', 'other-app-static-v1']);
     expect(stored.get('other-app-static-v1')).toBe(unrelated);
     expect(claim).toHaveBeenCalledOnce();
 

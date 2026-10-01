@@ -28,6 +28,8 @@ Service worker yalnızca üretim derlemesinde kaydedilir. Önbellek izin listesi
 
 Manifest veya çevrimdışı ekran değiştiğinde statik önbelleğin sürümü de yenilenir. Kasa güncellemesi eski Still statik önbelleklerini ve önceki Kasa sürümlerinin statik önbelleklerini kaldırır; diğer uygulamaların önbelleklerine dokunmaz. Yeni sürüm açık uygulama ve sekmeler kapandıktan sonra devreye girer; telefonda eski görünüm kalırsa uygulamayı ve siteyi açık tutan sekmeleri kapatıp yeniden açın. Tam ekran ve bağımsız pencere kurulumları uygulama içinde kurulu olarak tanınır.
 
+Kurulum manifesti ve ana ekran simgeleri sürüme özel adreslerle sunulur. Bu adresler, açık sekmeler eski service worker'ı kullanırken yeni kurulumun eski statik önbellekteki simgeleri istemesini önler.
+
 Finansal API yanıtları, giriş bilgileri ve dışa aktarılan kayıtlar Cache Storage, localStorage, sessionStorage veya IndexedDB’ye yazılmaz. Açılış sayfası ağdan istenir; çevrimdışıyken yalnızca bağlantı gerektiğini anlatan statik ekran gösterilir. Açık bir oturumdaki görüntülenen veriler yalnızca bellektedir; kalıcı çevrimdışı erişim sağlanmaz.
 
 Yeni kayıt oluşturmak, kayıt değiştirmek, rapor okumak ve giriş yapmak sunucu bağlantısı gerektirir. Çevrimdışı işlemler sıraya alınmaz ve sonradan otomatik kaydedilmez. Yerel bilgisayarın veritabanı kendiliğinden telefona veya web sunucusuna aktarılmaz.

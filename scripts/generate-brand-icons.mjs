@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { readFile, writeFile } from 'node:fs/promises';
+import { copyFile, readFile, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -71,6 +71,20 @@ for (let i = 0; i < sizes.length; i++) {
   offset += pngs[i].length;
 }
 await writeFile(join(root, 'public/favicon.ico'), Buffer.concat([directory, ...pngs]));
+
+// Keep old URLs available, but use a new address for each installation asset.
+// Replacing bytes at an old URL does not invalidate phone or launcher caches.
+for (const [source, destination] of [
+  ['icons/icon-192.png', 'icons/kasa-icon-192-v2.png'],
+  ['icons/icon-512.png', 'icons/kasa-icon-512-v2.png'],
+  ['icons/maskable-512.png', 'icons/kasa-maskable-512-v2.png'],
+  ['icons/apple-touch-icon.png', 'icons/kasa-apple-touch-icon-v2.png'],
+  ['icons/favicon-32.png', 'icons/kasa-favicon-32-v2.png'],
+  ['icons/icon.svg', 'icons/kasa-favicon-v2.svg'],
+  ['favicon.ico', 'kasa-favicon-v2.ico'],
+]) {
+  await copyFile(join(root, 'public', source), join(root, 'public', destination));
+}
 
 for (const name of ['kasa-mark', 'kasa-mark-mint', 'kasa-logo', 'kasa-logo-light']) {
   const source = await readFile(join(root, 'public/brand', `${name}.svg`));
