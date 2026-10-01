@@ -14,7 +14,9 @@
         min-height: 100dvh;
         display: grid;
         place-items: center;
-        padding: 24px;
+        padding: calc(24px + env(safe-area-inset-top, 0px))
+          calc(24px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px))
+          calc(24px + env(safe-area-inset-left, 0px));
         background: #f5f7f9;
         color: #223441;
         font-family: system-ui, sans-serif;
@@ -22,10 +24,11 @@
       main {
         max-width: 420px;
         width: 100%;
-        padding: 38px;
+        padding: clamp(20px, 6vw, 38px);
         background: white;
         border: 1px solid #e7ecef;
         border-radius: 18px;
+        overflow-wrap: anywhere;
       }
       img {
         width: 54px;

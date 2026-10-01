@@ -11,17 +11,15 @@ import {
   Sparkles,
   Wallet,
 } from 'lucide-react';
-import type { FinancialContext, AiPlan, Transaction } from '../../shared/types';
+import type { FinancialContext, Transaction } from '../../shared/types';
 import { date, money, typeNames } from '../format';
 import { CategoryChart, TrendChart } from '../components/LazyCharts';
-import { QuickEntry } from '../components/QuickEntry';
 import { Button, Empty, LinkButton, Money, Panel, SectionHead, Tag } from '../components/ui';
 import { useAuth } from '../auth';
 
 export function Dashboard({
   context,
-  onReview,
-  onSettings,
+  onQuickEntry,
   navigate,
   onCreate,
   onCycle,
@@ -29,8 +27,7 @@ export function Dashboard({
   onTransaction,
 }: {
   context: FinancialContext;
-  onReview: (result: AiPlan) => void;
-  onSettings: () => void;
+  onQuickEntry: () => void;
   navigate: (page: string) => void;
   onCreate: (kind: 'accounts' | 'debts' | 'recurring' | 'subscriptions') => void;
   onCycle: () => void;
@@ -120,7 +117,6 @@ export function Dashboard({
           {date(new Date().toISOString())}
         </div>
       </div>
-      <QuickEntry onReview={onReview} onSettings={onSettings} />
       <div className="overview-head">
         <h2>Finansal görünümünüz</h2>
         <span>{context.currentCycle ? context.currentCycle.name : 'Tüm kayıtlı hareketler'}</span>
@@ -152,9 +148,13 @@ export function Dashboard({
           </div>
           <div>
             <h3>Yeni bir başlangıç. Kendi rakamlarınız, kendi hızınız.</h3>
-            <p>İlk notunuzu yukarıya yazın veya hesaplarınızı oluşturun.</p>
+            <p>Sağ alttaki + düğmesiyle ilk notunuzu ekleyin veya hesaplarınızı oluşturun.</p>
           </div>
           <div className="onboarding-actions">
+            <Button onClick={onQuickEntry}>
+              <Sparkles size={15} />
+              Not ekle
+            </Button>
             <Button variant="secondary" onClick={() => onCreate('accounts')}>
               <Plus size={15} />
               Hesap ekle
@@ -182,7 +182,7 @@ export function Dashboard({
               compact
               icon={<ReceiptText size={23} />}
               title="İlk kaydınızla başlayın"
-              detail="Yukarıya bir not ekleyin. Gelir, harcama ve borç hareketlerinin her biri ayrı izlenir."
+              detail="Sağ alttaki + düğmesiyle bir not ekleyin. Gelir, harcama ve borç hareketlerinin her biri ayrı izlenir."
             />
           ) : (
             <div className="activity-list">

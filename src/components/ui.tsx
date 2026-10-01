@@ -20,10 +20,17 @@ export function Button({
 export function IconButton({
   children,
   label,
+  className = '',
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { label: string }) {
   return (
-    <button type="button" className="icon-button" aria-label={label} title={label} {...props}>
+    <button
+      type="button"
+      className={`icon-button ${className}`}
+      aria-label={label}
+      title={label}
+      {...props}
+    >
       {children}
     </button>
   );
@@ -184,7 +191,18 @@ export function Modal({
     };
     dialog.addEventListener('cancel', close);
     document.body.classList.add('dialog-open');
+    const viewport = window.visualViewport;
+    const resize = () => {
+      if (!viewport || viewport.scale !== 1) return;
+      dialog.style.setProperty('--dialog-viewport-height', `${viewport.height}px`);
+      dialog.style.setProperty('--dialog-viewport-top', `${viewport.offsetTop}px`);
+    };
+    resize();
+    viewport?.addEventListener('resize', resize);
+    viewport?.addEventListener('scroll', resize);
     return () => {
+      viewport?.removeEventListener('resize', resize);
+      viewport?.removeEventListener('scroll', resize);
       dialog.removeEventListener('cancel', close);
       if (dialog.open) dialog.close();
       document.body.classList.remove('dialog-open');

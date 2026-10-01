@@ -49,6 +49,10 @@ const navigation = [
   { title: 'Raporlar', icon: ChartNoAxesCombined, path: 'reports' },
   { title: 'Ayarlar', icon: Settings2, path: 'settings' },
 ];
+const mobileNavigation = navigation.filter((item) =>
+  ['dashboard', 'transactions', 'accounts', 'reports'].includes(item.path),
+);
+const mobileLayout = '(max-width: 900px), (max-width: 1100px) and (max-height: 500px)';
 type Mode =
   | { kind: 'quick' }
   | { kind: 'ai-review'; plan: AiPlan }
@@ -84,6 +88,7 @@ export function App() {
   const { online } = usePwa();
   const [page, setPage] = useState(currentPage);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [mobile, setMobile] = useState(() => window.matchMedia(mobileLayout).matches);
   const [revision, setRevision] = useState(0);
   const [mode, setMode] = useState<Mode>(null);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -94,6 +99,12 @@ export function App() {
   const context = resource.data;
   const close = useCallback(() => setMode(null), []);
   const notify = useCallback((message: string, error = false) => setToast({ message, error }), []);
+  const openQuickEntry = useCallback(() => {
+    if (context && online && !reviewBusy) {
+      setMobileOpen(false);
+      setMode({ kind: 'quick' });
+    }
+  }, [context, online, reviewBusy]);
   const saved = useCallback(() => {
     setRevision((value) => value + 1);
     close();
@@ -117,12 +128,51 @@ export function App() {
     const shortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
-        if (context && !reviewBusy) setMode({ kind: 'quick' });
+        openQuickEntry();
       }
     };
     document.addEventListener('keydown', shortcut);
     return () => document.removeEventListener('keydown', shortcut);
-  }, [context, reviewBusy]);
+  }, [openQuickEntry]);
+  useEffect(() => {
+    const media = window.matchMedia(mobileLayout);
+    const update = () => {
+      setMobile(media.matches);
+      if (!media.matches) setMobileOpen(false);
+    };
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const sidebar = document.getElementById('main-navigation')!;
+    const controls = () =>
+      Array.from(sidebar.querySelectorAll<HTMLElement>('a[href], button:not(:disabled)'));
+    controls()[0]?.focus();
+    document.body.classList.add('mobile-nav-open');
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileOpen(false);
+      if (event.key !== 'Tab') return;
+      const elements = controls();
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.classList.remove('mobile-nav-open');
+      document.removeEventListener('keydown', onKeyDown);
+      document
+        .querySelector<HTMLButtonElement>('.mobile-menu-button')
+        ?.focus({ preventScroll: true });
+    };
+  }, [mobileOpen]);
   useEffect(() => {
     const update = () => {
       if (document.visibilityState === 'visible') setRevision((value) => value + 1);
@@ -202,7 +252,15 @@ export function App() {
     mode?.kind === 'record' ? (mode.record ? editLabels : recordLabels)[mode.collection] : '';
   return (
     <div className="app-shell">
-      <a className="skip-link" href="#main-content">
+      <a
+        className="skip-link"
+        href="#main-content"
+        inert={mobileOpen}
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('main-content')?.focus();
+        }}
+      >
         İçeriğe geç
       </a>
       {mobileOpen && (
@@ -212,20 +270,35 @@ export function App() {
           onClick={() => setMobileOpen(false)}
         />
       )}
-      <aside className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`} aria-label="Ana menü">
-        <a
-          className="brand"
-          href="#/dashboard"
-          onClick={() => setMobileOpen(false)}
-          aria-label="Still ana sayfa"
-        >
-          <span className="brand-mark">
-            <Waves size={26} strokeWidth={1.7} />
-          </span>
-          <span>
-            still<span className="brand-dot">.</span>
-          </span>
-        </a>
+      <aside
+        id="main-navigation"
+        className={`sidebar ${mobileOpen ? 'sidebar-open' : ''}`}
+        aria-label="Ana menü"
+        aria-hidden={mobile && !mobileOpen ? true : undefined}
+        inert={mobile && !mobileOpen}
+      >
+        <div className="sidebar-heading">
+          <a
+            className="brand"
+            href="#/dashboard"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Still ana sayfa"
+          >
+            <span className="brand-mark">
+              <Waves size={26} strokeWidth={1.7} />
+            </span>
+            <span>
+              still<span className="brand-dot">.</span>
+            </span>
+          </a>
+          <IconButton
+            label="Menüyü kapat"
+            className="mobile-sidebar-close"
+            onClick={() => setMobileOpen(false)}
+          >
+            <X size={21} />
+          </IconButton>
+        </div>
         <div className="sidebar-caption">KİŞİSEL ALANINIZ</div>
         <nav>
           {navigation.map((item) => (
@@ -255,6 +328,7 @@ export function App() {
           <button
             className="workspace-button"
             onClick={() => {
+              setMobileOpen(false);
               setWorkspaceResult('');
               setMode({ kind: 'workspace' });
             }}
@@ -271,18 +345,22 @@ export function App() {
           </button>
         </div>
       </aside>
-      <div className="main-shell">
+      <div className="main-shell" inert={mobileOpen}>
         <header className="topbar">
           <div className="topbar-left">
             <IconButton
-              label="Menüyü aç"
+              label={mobileOpen ? 'Menüyü kapat' : 'Menüyü aç'}
               className="mobile-menu-button"
+              aria-expanded={mobileOpen}
+              aria-controls="main-navigation"
               onClick={() => setMobileOpen(!mobileOpen)}
             >
               <Menu size={21} />
             </IconButton>
             <div className="breadcrumb">
-              <span>Kişisel alanım</span>
+              <a href="#/dashboard" aria-label="Ana sayfaya dön">
+                Ana sayfa
+              </a>
               <ChevronRight size={14} />
               <strong>{page === 'Genel bakış' ? 'Genel bakış' : page}</strong>
             </div>
@@ -292,10 +370,6 @@ export function App() {
               <i />
               {session.required ? 'Size ait. Güvenli oturum.' : 'Size ait. Bilgisayarınızda.'}
             </span>
-            <Button onClick={() => setMode({ kind: 'quick' })} disabled={!context || !online}>
-              <Plus size={17} />
-              Hızlı ekle<kbd>⌘ K</kbd>
-            </Button>
             {session.required && (
               <IconButton label="Çıkış yap" onClick={() => void logout()}>
                 <LogOut size={18} />
@@ -324,8 +398,7 @@ export function App() {
               {page === 'Genel bakış' && (
                 <Dashboard
                   context={context}
-                  onReview={review}
-                  onSettings={openSettings}
+                  onQuickEntry={openQuickEntry}
                   navigate={navigate}
                   onCreate={addRecord}
                   onCycle={() => setMode({ kind: 'cycle' })}
@@ -401,6 +474,31 @@ export function App() {
           )}
         </main>
       </div>
+      <nav className="mobile-bottom-nav" aria-label="Hızlı gezinme" inert={mobileOpen}>
+        {mobileNavigation.map((item) => (
+          <a
+            key={item.path}
+            href={`#/${item.path}`}
+            aria-current={page === item.title ? 'page' : undefined}
+            className={page === item.title ? 'active' : ''}
+          >
+            <item.icon size={21} strokeWidth={1.7} aria-hidden="true" />
+            <span>{item.title}</span>
+          </a>
+        ))}
+      </nav>
+      <button
+        type="button"
+        className="quick-add-fab"
+        aria-label="Yapay zekâ ile kayıt ekle"
+        aria-haspopup="dialog"
+        title="Yapay zekâ ile kayıt ekle (⌘ / Ctrl K)"
+        disabled={!context || !online || reviewBusy}
+        onClick={openQuickEntry}
+        inert={mobileOpen}
+      >
+        <Plus size={28} strokeWidth={1.8} aria-hidden="true" />
+      </button>
       {context && mode?.kind === 'quick' && (
         <Modal
           title="Bir not ekleyin"

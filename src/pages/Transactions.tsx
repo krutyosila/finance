@@ -241,23 +241,37 @@ export function Transactions({
         ) : (
           <>
             <div className="table-scroll" aria-busy={loading}>
-              <table className="transaction-table">
-                <thead>
-                  <tr>
-                    <th>Açıklama</th>
-                    <th>Tür</th>
-                    <th>Hesap</th>
-                    <th>Tarih</th>
-                    <th className="align-right">Tutar</th>
-                    <th>
+              <table className="transaction-table" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th role="columnheader" scope="col">
+                      Açıklama
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Tür
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Hesap
+                    </th>
+                    <th role="columnheader" scope="col">
+                      Tarih
+                    </th>
+                    <th className="align-right" role="columnheader" scope="col">
+                      Tutar
+                    </th>
+                    <th role="columnheader" scope="col">
                       <span className="sr-only">İşlemler</span>
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {records.map((transaction) => (
-                    <tr key={transaction.id} className={transaction.deletedAt ? 'deleted-row' : ''}>
-                      <td>
+                    <tr
+                      key={transaction.id}
+                      className={transaction.deletedAt ? 'deleted-row' : ''}
+                      role="row"
+                    >
+                      <td className="mobile-table-title" data-label="Açıklama" role="cell">
                         <button
                           className="table-description"
                           onClick={() =>
@@ -280,7 +294,7 @@ export function Transactions({
                           </span>
                         </button>
                       </td>
-                      <td>
+                      <td data-label="Tür" role="cell">
                         <Tag
                           tone={
                             transaction.type === 'INCOME' || transaction.type === 'REFUND'
@@ -294,7 +308,7 @@ export function Transactions({
                           {typeNames[transaction.type]}
                         </Tag>
                       </td>
-                      <td>
+                      <td data-label="Hesap" role="cell">
                         <span className="account-cell">{accountName(transaction.accountId)}</span>
                         {transaction.destinationAccountId && (
                           <small className="destination-cell">
@@ -302,8 +316,14 @@ export function Transactions({
                           </small>
                         )}
                       </td>
-                      <td className="date-cell">{date(transaction.timestamp)}</td>
-                      <td className="align-right">
+                      <td className="date-cell" data-label="Tarih" role="cell">
+                        {date(transaction.timestamp)}
+                      </td>
+                      <td
+                        className="align-right mobile-table-amount"
+                        data-label="Tutar"
+                        role="cell"
+                      >
                         <strong className="table-amount">
                           {money(transaction.amount, transaction.currency)}
                         </strong>
@@ -317,7 +337,7 @@ export function Transactions({
                           </small>
                         )}
                       </td>
-                      <td>
+                      <td className="mobile-table-actions" data-label="İşlemler" role="cell">
                         <div className="row-actions">
                           <IconButton
                             label="İşlem geçmişini gör"

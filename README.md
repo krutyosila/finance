@@ -56,7 +56,7 @@ HTTPS uygulamasını bir PWA olarak yükleyebilirsiniz. Destekleyen tarayıcıda
 
 **Ayarlar → OpenAI bağlantısı** bölümünde anahtarınızı ekleyin, modeli seçin ve **Bağlantıyı test et** düğmesiyle erişimi doğrulayın. Model menüsünde **GPT-5.4 Mini** (varsayılan `gpt-5.4-mini`), **GPT-5.4 Nano** ve **GPT-5.4** seçenekleri bulunur. **Diğer model** ile özel bir model adı girebilirsiniz; kayıtlı özel adlar korunur. Bu menü tüm erişilebilir modellerin listesi değildir. Seçtiğiniz model hesabınızda erişilebilir olmalı, Responses API ve Structured Outputs desteklemelidir. Seçim yalnız **Ayarları kaydet** ile uygulanır. Test anahtar/model erişimini kontrol eder; yorumlama veya kota garantisi vermez. Anahtar giriş kutusu tekrar doldurulmaz ve API anahtarı tarayıcıya geri verilmez. Boş bırakarak yalnız modeli değiştirebilirsiniz. **Ayarlar → Giriş şifresi** bölümünde mevcut parolanızı doğrulayarak en az 8 karakterli yeni parola belirleyebilirsiniz; bütün oturumlar kapanır.
 
-**Ne oldu?** alanına Türkçe finans metni veya çok satırlı liste yazın. AI; gelir/gider/transfer gibi işlemleri, hesapları, borç tanımlarını, abonelikleri, düzenli ödemeleri ve yeni finans dönemlerini birlikte hazırlayabilir. Örneğin:
+Sağ alttaki yuvarlak **+** düğmesiyle not penceresini açın. **Ne oldu?** alanına Türkçe finans metni veya çok satırlı liste yazın. AI; gelir/gider/transfer gibi işlemleri, hesapları, borç tanımlarını, abonelikleri, düzenli ödemeleri ve yeni finans dönemlerini birlikte hazırlayabilir. Örneğin:
 
 ```text
 Garanti banka hesabımda başlangıç bakiyesi 25000 TL var.

@@ -10,7 +10,9 @@ Still aynı web arayüzünü telefon ve bilgisayarda kurulabilir uygulama olarak
 - iPhone/iPad Safari’de **Paylaş → Ana Ekrana Ekle** seçeneğini kullanın.
 - Diğer destekleyen tarayıcılarda tarayıcının uygulama kurulum menüsünü kullanın.
 
-Kurulan uygulama kendi penceresinde açılır. Uygulama kimliği ve başlangıç adresi `/`, görünümü `standalone` olarak tanımlanmıştır. Manifestte 192 ve 512 piksel PNG simgeleri ile Android için ayrı bir maskable simge bulunur. Apple ana ekran simgesi 180 pikseldir; tüm simgeler yerel SVG kaynaklarından üretilmiştir.
+Kurulan uygulama destekleyen tarayıcılarda tam ekranı tercih eder; diğerlerinde kendi penceresinde (`standalone`) açılır. Uygulama kimliği ve başlangıç adresi `/` olarak tanımlanmıştır. Ekran yönü kilitlenmez; çentik ve ana ekran göstergesi için dört kenardaki güvenli boşluklar korunur. Manifestte 192 ve 512 piksel PNG simgeleri ile Android için ayrı bir maskable simge bulunur. Apple ana ekran simgesi 180 pikseldir; tüm simgeler yerel SVG kaynaklarından üretilmiştir.
+
+Mobil alt menüden Genel bakış, İşlemler, Hesaplar ve Raporlar ekranlarına tek dokunuşla geçebilirsiniz. Diğer ekranlar üstteki menüdedir. Sağ alttaki yuvarlak **+** düğmesi AI not penceresini açar; **Elle ekle** bağlantısı işlem formuna geçer. Telefonlarda pencereler görünen ekranı doldurur ve formlar dikey kaydırılır. İşlem ve rapor tabloları dar ekranlarda yatay kaydırma yerine bütün alanları gösteren kartlara dönüşür.
 
 ## Giriş ve çıkış
 

@@ -331,31 +331,65 @@ export function Reports({
                   />
                 ) : (
                   <div className="report-table-wrap">
-                    <table className="report-table">
-                      <thead>
-                        <tr>
-                          <th>Borç</th>
-                          <th>Güncel bakiye</th>
-                          <th>Ödemeler</th>
-                          <th>Yeni kullanım</th>
-                          <th>Faiz</th>
-                          <th>Masraflar</th>
+                    <table className="report-table" role="table">
+                      <thead role="rowgroup">
+                        <tr role="row">
+                          <th role="columnheader" scope="col">
+                            Borç
+                          </th>
+                          <th role="columnheader" scope="col">
+                            Güncel bakiye
+                          </th>
+                          <th role="columnheader" scope="col">
+                            Ödemeler
+                          </th>
+                          <th role="columnheader" scope="col">
+                            Yeni kullanım
+                          </th>
+                          <th role="columnheader" scope="col">
+                            Faiz
+                          </th>
+                          <th role="columnheader" scope="col">
+                            Masraflar
+                          </th>
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody role="rowgroup">
                         {data.debts.map((debt) => {
                           const balance = debtBalancePresentation(debt);
                           return (
-                            <tr key={debt.id}>
-                              <td>{debt.name}</td>
-                              <td>
+                            <tr key={debt.id} role="row">
+                              <td className="mobile-table-title" data-label="Borç" role="cell">
+                                {debt.name}
+                              </td>
+                              <td
+                                className="mobile-table-amount"
+                                data-label="Güncel bakiye"
+                                role="cell"
+                              >
                                 {money(balance.amount, debt.currency)}
                                 {balance.label === 'Kart bakiyesi' && ' (Kart bakiyesi)'}
                               </td>
-                              <td>{money(debt.payments, debt.currency)}</td>
-                              <td>{money(debt.newUsage, debt.currency)}</td>
-                              <td>{money(debt.interest, debt.currency)}</td>
-                              <td>{money(debt.fees, debt.currency)}</td>
+                              <td className="mobile-table-amount" data-label="Ödemeler" role="cell">
+                                {money(debt.payments, debt.currency)}
+                              </td>
+                              <td
+                                className="mobile-table-amount"
+                                data-label="Yeni kullanım"
+                                role="cell"
+                              >
+                                {money(debt.newUsage, debt.currency)}
+                              </td>
+                              <td className="mobile-table-amount" data-label="Faiz" role="cell">
+                                {money(debt.interest, debt.currency)}
+                              </td>
+                              <td
+                                className="mobile-table-amount"
+                                data-label="Masraflar"
+                                role="cell"
+                              >
+                                {money(debt.fees, debt.currency)}
+                              </td>
                             </tr>
                           );
                         })}
@@ -380,38 +414,78 @@ export function Reports({
                 />
               ) : (
                 <div className="report-table-wrap">
-                  <table className="report-table">
-                    <thead>
-                      <tr>
-                        <th>Ödeme</th>
-                        <th>Tür</th>
-                        <th>Beklenen tutar</th>
-                        <th>Sıklık</th>
-                        <th>Sonraki tarih</th>
-                        <th>Durum</th>
+                  <table className="report-table" role="table">
+                    <thead role="rowgroup">
+                      <tr role="row">
+                        <th role="columnheader" scope="col">
+                          Ödeme
+                        </th>
+                        <th role="columnheader" scope="col">
+                          Tür
+                        </th>
+                        <th role="columnheader" scope="col">
+                          Beklenen tutar
+                        </th>
+                        <th role="columnheader" scope="col">
+                          Sıklık
+                        </th>
+                        <th role="columnheader" scope="col">
+                          Sonraki tarih
+                        </th>
+                        <th role="columnheader" scope="col">
+                          Durum
+                        </th>
                       </tr>
                     </thead>
-                    <tbody>
+                    <tbody role="rowgroup">
                       {data.recurringObligations.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.name}</td>
-                          <td>Düzenli ödemeler</td>
-                          <td>{money(item.amount, item.currency)}</td>
-                          <td>{frequencyNames[item.frequency]}</td>
-                          <td>{date(item.dueDate)}</td>
-                          <td>
+                        <tr key={item.id} role="row">
+                          <td className="mobile-table-title" data-label="Ödeme" role="cell">
+                            {item.name}
+                          </td>
+                          <td data-label="Tür" role="cell">
+                            Düzenli ödemeler
+                          </td>
+                          <td
+                            className="mobile-table-amount"
+                            data-label="Beklenen tutar"
+                            role="cell"
+                          >
+                            {money(item.amount, item.currency)}
+                          </td>
+                          <td data-label="Sıklık" role="cell">
+                            {frequencyNames[item.frequency]}
+                          </td>
+                          <td data-label="Sonraki tarih" role="cell">
+                            {date(item.dueDate)}
+                          </td>
+                          <td data-label="Durum" role="cell">
                             <Tag>{!item.active ? 'Pasif' : statusNames[item.status]}</Tag>
                           </td>
                         </tr>
                       ))}
                       {data.subscriptions.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.service}</td>
-                          <td>Abonelik</td>
-                          <td>{money(item.amount, item.currency)}</td>
-                          <td>{frequencyNames[item.frequency]}</td>
-                          <td>{date(item.nextRenewal)}</td>
-                          <td>
+                        <tr key={item.id} role="row">
+                          <td className="mobile-table-title" data-label="Ödeme" role="cell">
+                            {item.service}
+                          </td>
+                          <td data-label="Tür" role="cell">
+                            Abonelik
+                          </td>
+                          <td
+                            className="mobile-table-amount"
+                            data-label="Beklenen tutar"
+                            role="cell"
+                          >
+                            {money(item.amount, item.currency)}
+                          </td>
+                          <td data-label="Sıklık" role="cell">
+                            {frequencyNames[item.frequency]}
+                          </td>
+                          <td data-label="Sonraki tarih" role="cell">
+                            {date(item.nextRenewal)}
+                          </td>
+                          <td data-label="Durum" role="cell">
                             <Tag>{!item.active ? 'İptal edildi' : statusNames[item.status]}</Tag>
                           </td>
                         </tr>
