@@ -182,6 +182,95 @@ function worker({ offline = false, status = 200, redirected = false } = {}) {
 }
 
 describe('service worker privacy boundary', () => {
+  it('upgrades the previous public cache without touching unrelated caches or API requests', async () => {
+    const previous = new Map([
+      ['/manifest.webmanifest', new Response('old manifest')],
+      ['/offline.html', new Response('old offline page')],
+    ]);
+    const unrelated = new Map([['/other-app.js', new Response('unrelated asset')]]);
+    const stored = new Map<string, Map<string, Response>>([
+      ['still-static-v0', new Map()],
+      ['still-static-v1', previous],
+      ['other-app-static-v1', unrelated],
+    ]);
+    const publicContent = new Map([
+      ['/manifest.webmanifest', 'new manifest'],
+      ['/offline.html', 'new offline page'],
+    ]);
+    const handlers = new Map<string, (event: any) => void>();
+    const keyOf = (request: Request | string) =>
+      typeof request === 'string' ? request : new URL(request.url).pathname;
+    const fetchPublic = vi.fn(
+      async (request: Request | string) =>
+        new Response(publicContent.get(keyOf(request)) || 'public icon'),
+    );
+    const claim = vi.fn(async () => undefined);
+    const sandbox = {
+      self: {
+        location: { origin: 'https://finance.example' },
+        clients: { claim },
+        addEventListener: (name: string, handler: (event: any) => void) =>
+          handlers.set(name, handler),
+      },
+      caches: {
+        open: async (name: string) => {
+          if (!stored.has(name)) stored.set(name, new Map());
+          const entries = stored.get(name)!;
+          return {
+            match: async (request: Request | string) => entries.get(keyOf(request))?.clone(),
+            put: async (request: Request | string, response: Response) => {
+              entries.set(keyOf(request), response);
+            },
+            addAll: async (paths: string[]) => {
+              for (const path of paths) entries.set(path, await fetchPublic(path));
+            },
+          };
+        },
+        keys: async () => [...stored.keys()],
+        delete: async (name: string) => stored.delete(name),
+      },
+      fetch: fetchPublic,
+      URL,
+    };
+    vm.runInNewContext(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), sandbox);
+    const lifecycle = async (name: string) => {
+      let pending: Promise<unknown> | undefined;
+      handlers.get(name)!({
+        waitUntil: (value: Promise<unknown>) => {
+          pending = value;
+        },
+      });
+      await pending;
+    };
+    const request = (path: string) => {
+      let response: Promise<Response> | undefined;
+      handlers.get('fetch')!({
+        request: new Request(`https://finance.example${path}`),
+        respondWith: (value: Promise<Response>) => {
+          response = value;
+        },
+      });
+      return response;
+    };
+
+    await lifecycle('install');
+    expect(await previous.get('/manifest.webmanifest')!.clone().text()).toBe('old manifest');
+    expect(await previous.get('/offline.html')!.clone().text()).toBe('old offline page');
+    expect(claim).not.toHaveBeenCalled();
+    await lifecycle('activate');
+    expect(stored.has('still-static-v0')).toBe(false);
+    expect(stored.has('still-static-v1')).toBe(false);
+    expect(stored.get('other-app-static-v1')).toBe(unrelated);
+    expect(claim).toHaveBeenCalledOnce();
+
+    const fetchedDuringInstall = fetchPublic.mock.calls.length;
+    expect(await (await request('/manifest.webmanifest'))!.text()).toBe('new manifest');
+    expect(await (await request('/offline.html'))!.text()).toBe('new offline page');
+    expect(request('/api/context')).toBeUndefined();
+    expect(request('/api/auth/session')).toBeUndefined();
+    expect(fetchPublic).toHaveBeenCalledTimes(fetchedDuringInstall);
+  });
+
   it('never handles financial API reads or authentication requests', () => {
     const sw = worker();
     expect(sw.request('/api/context')).toBeUndefined();

@@ -32,14 +32,16 @@ Kur ve TRY tutarı elle girilir. Planlı ödemeler otomatik muhasebeleşmez. USD
 
 ## Mobil arayüz güncellemesi — 1 Ekim 2026
 
-- `npm test`: 26 dosyada 398 test geçti. Yerel bağlantı açan testler sandbox dışında doğrulandı.
+- `npm test`: 26 dosyada 399 test geçti. Yerel bağlantı açan testler sandbox dışında doğrulandı.
 - `npm run build`: TypeScript kontrolü ve üretim derlemesi geçti.
-- `scripts/check-mobile-ui.mjs`, derlenmiş üretim önizlemesinde 1.528 tarayıcı kontrolünü hatasız tamamladı. Boyutlar: 320×568, 375×667, 390×844, 430×932, 768×1024, 844×390, 932×430 ve 1280×900.
+- `scripts/check-mobile-ui.mjs`, derlenmiş üretim önizlemesinde 1.552 tarayıcı kontrolünü hatasız tamamladı. Boyutlar: 320×568, 375×667, 390×844, 430×932, 768×1024, 844×390, 932×430 ve 1280×900.
 - Sekiz ekran, bütün rapor sekmeleri, uzun kesintisiz adlar, büyük tutarlar ve birden fazla para birimiyle sayfa/panel/form genişlikleri kontrol edildi. İşlem ve rapor tablolarında mobil yatay kaydırma kalmadı.
 - Alt menüden bütün ekranlarda ana sayfaya dönüş, yuvarlak + düğmesi, yalnız modal içindeki AI girişi, AI önizlemesi, elle giriş, hesap/borç/ödeme/abonelik formları, geçmiş, silme ve dönem pencereleri kontrol edildi.
 - Menü ve modal kapatma, klavye odağı, formun alt düğmelerine dikey kaydırmayla ulaşma, giriş ve bağlantı hatası ekranları doğrulandı.
 - Dört kenarda güvenli alan boşluğu simüle edildi; kaydırılan modal başlığı çentik boşluğunun altında kaldı. 390 ve 1280 piksel genişliklerde yalnız `visualViewport` yüksekliği/üst konumu değiştirilerek klavye açılmasına benzer durum doğrulandı.
+- PWA önbellek geçişi testi önce eski sürümde hata verdi, ardından güncel sürümde geçti. Yeni manifest ve çevrimdışı ekran yenilenir; eski uygulama önbelleği temizlenir, diğer uygulamaların önbelleği korunur ve özel API istekleri önbelleği kullanmaz.
+- Her ekran boyutunda tarayıcıdaki kurulum yönlendirmesi, tam ekran açılışında kurulu durumu ve tarayıcıdan tam ekrana geçişte kurulu durumuna güncelleme doğrulandı.
 
-Tarayıcı kontrolleri sentetik API yanıtları kullanır; gerçek finans veritabanına veya OpenAI'ye istek göndermez. Bu bölüm yerel üretim önizlemesini doğrular; gerçek telefon/PWA kurulumunda ve canlı sitede yeni bir dağıtım testi yapılmadı.
+Tarayıcı kontrolleri sentetik API yanıtları kullanır; gerçek finans veritabanına veya OpenAI'ye istek göndermez. Güvenli alan, klavye ve kurulum modu tarayıcıda simüle edilir; fiziksel telefon/PWA kurulumu bu kontrollerin kapsamı dışındadır.
 
 Yeniden çalıştırmak için bir uygulama önizlemesi açıp `MOBILE_QA_URL=http://127.0.0.1:4173 node scripts/check-mobile-ui.mjs` kullanın. Script mevcut Playwright kurulumunu veya Codex'in paketli tarayıcı çalışma ortamını kullanır; farklı bir kurulum için `PLAYWRIGHT_MODULE` verilebilir. Ekran görüntüleri ve JSON raporu geçici klasörde saklanır.

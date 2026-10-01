@@ -1,4 +1,4 @@
-const CACHE_NAME = 'still-static-v1';
+const CACHE_NAME = 'still-static-v2';
 const PUBLIC_FILES = new Set([
   '/offline.html',
   '/manifest.webmanifest',

@@ -572,6 +572,96 @@ async function verifyVisualViewportKeyboard(page, mobile) {
   }
 }
 
+async function simulateDisplayMode(page, initialMode) {
+  await page.addInitScript((initialMode) => {
+    const nativeMatchMedia = window.matchMedia.bind(window);
+    const displayQueries = new Set();
+    let displayMode = initialMode;
+    window.matchMedia = (query) => {
+      const media = nativeMatchMedia(query);
+      const modes = query
+        .split(',')
+        .map((part) => part.match(/^\s*\(\s*display-mode\s*:\s*([\w-]+)\s*\)\s*$/)?.[1]);
+      if (modes.some((mode) => !mode)) return media;
+      Object.defineProperty(media, 'matches', { get: () => modes.includes(displayMode) });
+      displayQueries.add({ media, modes });
+      return media;
+    };
+    window.__mobileQaSetDisplayMode = (nextMode) => {
+      const previousMode = displayMode;
+      displayMode = nextMode;
+      for (const { media, modes } of displayQueries) {
+        if (modes.includes(previousMode) !== media.matches)
+          media.dispatchEvent(
+            new MediaQueryListEvent('change', { matches: media.matches, media: media.media }),
+          );
+      }
+    };
+  }, initialMode);
+}
+
+async function verifyFullscreenInstall(browser, size, mobile) {
+  currentScreen = 'pwa-install';
+  for (const initialMode of ['fullscreen', 'browser']) {
+    const context = await browser.newContext({
+      viewport: size,
+      isMobile: mobile,
+      hasTouch: mobile,
+      reducedMotion: 'reduce',
+      serviceWorkers: 'block',
+    });
+    await context.route('**/api/**', routeAPI);
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(3500);
+      page.on('pageerror', (error) =>
+        findings.push({
+          viewport: currentSize,
+          screen: currentScreen,
+          message: `Browser exception: ${error.message}`,
+        }),
+      );
+      await simulateDisplayMode(page, initialMode);
+      await page.goto(baseURL);
+      await go(page, 'settings');
+      currentScreen = 'pwa-install';
+      if (mobile) await page.getByRole('button', { name: 'Menüyü aç', exact: true }).click();
+      await page.locator('.workspace-button').click();
+      const panel = page.locator('dialog[open] .install-panel');
+      await panel.waitFor();
+      const installed = panel.getByRole('heading', {
+        name: 'Still uygulaması kurulu',
+        exact: true,
+      });
+      if (initialMode === 'browser') {
+        check(
+          await panel
+            .getByRole('heading', { name: 'Her ekranda aynı alan', exact: true })
+            .isVisible(),
+          'browser mode initially offers installation guidance',
+          await panel.innerText(),
+        );
+        await page.evaluate(() => window.__mobileQaSetDisplayMode('fullscreen'));
+      }
+      await installed.waitFor({ state: 'visible', timeout: 2000 }).catch(() => {});
+      check(
+        (await installed.isVisible()) &&
+          (await panel.locator('.install-instruction, button').count()) === 0,
+        initialMode === 'fullscreen'
+          ? 'initial fullscreen display mode shows installed status without installation guidance'
+          : 'browser to fullscreen display-mode change shows installed status without installation guidance',
+        await panel.innerText(),
+      );
+      await screenshot(
+        page,
+        initialMode === 'fullscreen' ? 'pwa-fullscreen' : 'pwa-browser-to-fullscreen',
+      );
+    } finally {
+      await context.close();
+    }
+  }
+}
+
 async function routeAPI(route) {
   const url = new URL(route.request().url());
   const path = url.pathname.replace(/^\/api/, '');
@@ -929,6 +1019,8 @@ try {
         await authContext.close();
       }
     });
+    if (!baseline)
+      await step('fullscreen-install', () => verifyFullscreenInstall(browser, size, mobile));
     console.log(
       `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
     );

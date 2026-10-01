@@ -20,7 +20,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
   const [installed, setInstalled] = useState(
     () =>
-      window.matchMedia('(display-mode: standalone)').matches ||
+      window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches ||
       !!(navigator as Navigator & { standalone?: boolean }).standalone,
   );
   const ios =
@@ -37,7 +37,7 @@ export function PwaProvider({ children }: { children: ReactNode }) {
     };
     const wentOnline = () => setOnline(true);
     const wentOffline = () => setOnline(false);
-    const media = window.matchMedia('(display-mode: standalone)');
+    const media = window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)');
     const displayChanged = () => {
       if (media.matches) setInstalled(true);
     };
