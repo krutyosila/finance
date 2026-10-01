@@ -350,7 +350,8 @@ export function TransactionForm({
       {values.type === 'DEBT_PAYMENT' && (
         <p className="form-note">
           <Info size={15} /> Önceden kaydedilmiş borcun ödemesi nakdi ve borcu azaltır; yeni harcama
-          oluşturmaz. Faiz ve masrafı oluştuğunda harcama olarak ayrıca kaydedin.
+          oluşturmaz. Kredi kartına borcundan fazla yatırılan tutar kart bakiyesi olur. Faiz ve
+          masrafı oluştuğunda harcama olarak ayrıca kaydedin.
         </p>
       )}
       {values.type === 'DEBT_USAGE' && (

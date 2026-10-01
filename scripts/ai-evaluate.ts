@@ -323,6 +323,146 @@ const cases: EvaluationCase[] = [
     },
   },
   {
+    id: 'denizbank_zero_debt_card_load',
+    certain: true,
+    text: 'denizbank kredi kartı ekledim 0 TL ve denizbank tl heabımdan 3000 TL eklemek istiyorum',
+    seed(finance) {
+      seedBank(finance, 'DenizBank TL', '5000');
+      finance.createAccount({
+        name: 'DenizBank kredi kartı',
+        type: 'CREDIT_CARD',
+        currency: 'TRY',
+        currentDebt: '0',
+      });
+    },
+    inspect(finance) {
+      count(finance, { accounts: 2, debts: 1, transactions: 1 });
+      const bank = account(finance, 'DenizBank TL', 'TRY'),
+        card = account(finance, 'DenizBank kredi kartı', 'TRY'),
+        cardDebt = debt(finance, 'DenizBank');
+      fields(tx(finance, 'DEBT_PAYMENT', '3000'), {
+        accountId: bank.id,
+        debtId: cardDebt.id,
+        destinationAccountId: null,
+        destinationAmount: null,
+      });
+      fields(card, { openingBalance: '0.00', currentDebt: '0.00', currentBalance: '3000.00' });
+      fields(cardDebt, { openingBalance: '0.00', currentBalance: '-3000.00', payments: '0.00' });
+      balance(finance, 'DenizBank TL', 'TRY', '2000');
+      noFlows(finance);
+      fields(finance.getContext().metrics, {
+        availableCash: { TRY: '2000.00' },
+        debt: { TRY: '0.00' },
+        assets: { TRY: '5000.00' },
+        netFinancialPosition: { TRY: '5000.00' },
+      });
+    },
+  },
+  {
+    id: 'new_credit_card_load',
+    certain: true,
+    text: 'Yeni Test Kart kredi kartını mevcut borcu 0 TL olarak oluştur. Yeni Deneme Bankası TL banka hesabımın bu hareketten önce açılış bakiyesi 5000 TL. Bu banka hesabından Test Kart kredi kartıma 3000 TL yükledim; borçsuz karta para yatırma, alışveriş değil.',
+    inspect(finance) {
+      count(finance, { accounts: 2, debts: 1, transactions: 1 });
+      const card = account(finance, 'Test Kart', 'TRY'),
+        cardDebt = debt(finance, 'Test Kart');
+      fields(card, {
+        type: 'CREDIT_CARD',
+        openingBalance: '0.00',
+        currentBalance: '3000.00',
+        currentDebt: '0.00',
+      });
+      fields(tx(finance, 'DEBT_PAYMENT', '3000'), {
+        accountId: account(finance, 'Deneme Bankası', 'TRY').id,
+        debtId: cardDebt.id,
+      });
+      balance(finance, 'Deneme Bankası', 'TRY', '2000');
+      noFlows(finance);
+    },
+  },
+  {
+    id: 'credit_card_excess_payment',
+    certain: true,
+    text: 'Deneme Bankası TL hesabımdan Test Kart kredi kartıma 3000 TL yatırdım. Kartın kalan borcundan fazla olan kısmı kart bakiyesi olarak kalsın.',
+    seed(finance) {
+      seedBank(finance, 'Deneme Bankası', '5000');
+      finance.createAccount({
+        name: 'Test Kart',
+        type: 'CREDIT_CARD',
+        currency: 'TRY',
+        currentDebt: '1000',
+      });
+    },
+    inspect(finance) {
+      count(finance, { accounts: 2, debts: 1, transactions: 1 });
+      fields(account(finance, 'Test Kart', 'TRY'), {
+        currentDebt: '0.00',
+        currentBalance: '2000.00',
+      });
+      fields(debt(finance, 'Test Kart'), {
+        openingBalance: '1000.00',
+        currentBalance: '-2000.00',
+        payments: '1000.00',
+      });
+      fields(tx(finance, 'DEBT_PAYMENT', '3000'), {
+        accountId: account(finance, 'Deneme Bankası', 'TRY').id,
+        debtId: debt(finance, 'Test Kart').id,
+      });
+      fields(finance.getContext().metrics, {
+        debtPayments: { TRY: '1000.00' },
+        cashOutflow: { TRY: '1000.00' },
+        assets: { TRY: '4000.00' },
+        debt: { TRY: '0.00' },
+      });
+      noFlows(finance);
+    },
+  },
+  {
+    id: 'card_credit_spending_and_refund',
+    certain: true,
+    text: 'Test Kart kredi kartımla 3500 TL market harcaması yaptım; ardından aynı karta bu alışverişin 1000 TL iadesi geldi. Sonra Deneme Bankası hesabımdan Test Kart kredi kartıma 200 TL daha yükledim.',
+    seed(finance) {
+      const bank = seedBank(finance, 'Deneme Bankası', '5000');
+      const card = finance.createAccount({
+        name: 'Test Kart',
+        type: 'CREDIT_CARD',
+        currency: 'TRY',
+        currentDebt: '0',
+      });
+      finance.createTransaction({
+        type: 'DEBT_PAYMENT',
+        amount: '3000',
+        currency: 'TRY',
+        accountId: bank.id,
+        debtId: debt(finance, 'Test Kart').id,
+        description: 'Önceki kart yüklemesi',
+        timestamp: '2026-01-01T12:00:00Z',
+      });
+      assert.equal(card.type, 'CREDIT_CARD');
+    },
+    inspect(finance) {
+      count(finance, { accounts: 2, debts: 1, transactions: 4 });
+      const card = account(finance, 'Test Kart', 'TRY');
+      assert.equal(tx(finance, 'EXPENSE', '3500').accountId, card.id);
+      assert.equal(tx(finance, 'REFUND', '1000').accountId, card.id);
+      fields(tx(finance, 'DEBT_PAYMENT', '200'), {
+        accountId: account(finance, 'Deneme Bankası', 'TRY').id,
+        debtId: debt(finance, 'Test Kart').id,
+      });
+      fields(card, { currentBalance: '700.00', currentDebt: '0.00' });
+      balance(finance, 'Deneme Bankası', 'TRY', '1800');
+      fields(finance.getContext().metrics, {
+        income: {},
+        expenses: { TRY: '2500.00' },
+        debtUsage: { TRY: '500.00' },
+        debtPayments: { TRY: '0.00' },
+        cashOutflow: { TRY: '3000.00' },
+        assets: { TRY: '2500.00' },
+        debt: { TRY: '0.00' },
+      });
+    },
+  },
+  {
     id: 'card_expense_and_refund',
     certain: true,
     text: 'Test Kart kredi kartımla 300 TL market harcaması yaptım, sonra aynı karta bu alışverişin 50 TL iadesi geldi. Bunlar kartın anapara harcaması ve iadesi. Ardından Deneme Bankası hesabımdan Test Kart kredi kartı borcuma 1000 TL ödeme yaptım.',

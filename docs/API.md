@@ -142,6 +142,8 @@ Hesap türleri: `BANK`, `CASH`, `CREDIT_CARD`, `OVERDRAFT`, `WALLET`, `SAVINGS`.
 
 Hesap/borç yanıtları hesaplanmış güncel bakiyeleri içerir. Açılış bakiyeleri işlem değil, başlangıç değerleridir. Kredi kartı ve KMH hesabı bağlı borcu atomik olarak oluşturur. Limit varlık yaratmaz. Geçmiş kayıtlarda referansı olan hesap/borçlar, referanslar giderilmeden silinemez.
 
+Kredi kartına para yatırma `DEBT_PAYMENT`, kaynak banka/nakit hesabı `accountId` ve kartın bağlı borcu `debtId` kullanır. Yalnız `CREDIT_CARD` için borcu aşan tutar kart bakiyesine dönüşür: hesapta pozitif `currentBalance`, sıfır `currentDebt`; bağlı borçta negatif `currentBalance` döner. Toplam borç yalnız pozitif borçları, varlıklar kart bakiyesini de içerir; kullanılabilir nakit kart bakiyesini içermez. `debtPayments` ve ödeme kaynaklı `cashOutflow` yalnız gerçek borç azaltımıdır. Kart bakiyesinden karşılanan alışveriş kısmı `cashOutflow` olur; yeni borç sayılmaz. Açılış borcu girdileri negatif olamaz; KMH ve diğer borçların fazla ödeme koruması devam eder.
+
 `POST /api/recurring/:id/pay` ve `POST /api/subscriptions/:id/pay`, yapılandırılmış işlem nesnesi kabul eder, gerçek bağlı gider oluşturur ve HTTP 201 ile döndürür. Planlanan tutarlar kendiliğinden gider olmaz. Durum yaklaşan, ödenmiş, gecikmiş veya abonelikte iptal edilmiş olabilir. Pasifleştirme geçmiş giderleri silmez.
 
 ## Döngüler ve bakım

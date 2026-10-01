@@ -282,14 +282,20 @@ export class FinanceService {
         expense = 0;
       const increaseDebt = (delta: number, component: string = 'PRINCIPAL') => {
         if (!debt) throw new Error('Mevcut bir borç seçin');
+        const before = Math.max(debt.balance, 0);
         debt.balance = add(debt.balance, delta);
-        if (debt.balance < 0)
+        if (debt.balance < 0 && linked!.type !== 'CREDIT_CARD')
           throw new Error('Ödeme veya iade, işlemin tarihinde kalan borcu aşıyor');
+        // Every historical balance must also have a representable change from opening debt.
+        add(debt.balance, -linked!.openingMinor);
+        const usage = Math.max(Math.max(debt.balance, 0) - before, 0),
+          payment = Math.max(before - Math.max(debt.balance, 0), 0);
         if (delta > 0) {
           const key =
             component === 'INTEREST' ? 'interest' : component === 'FEE' ? 'fees' : 'newUsage';
-          debt[key] = add(debt[key], delta);
-        } else if (t.type === 'DEBT_PAYMENT') debt.payments = add(debt.payments, -delta);
+          debt[key] = add(debt[key], key === 'newUsage' ? usage : delta);
+        } else if (t.type === 'DEBT_PAYMENT') debt.payments = add(debt.payments, payment);
+        return { usage, payment };
       };
       if (t.type === 'INCOME') {
         affectCash(t, amount, a);
@@ -298,9 +304,12 @@ export class FinanceService {
       } else if (t.type === 'EXPENSE') {
         expense = amount;
         if (debt) {
-          increaseDebt(settledAmount, t.debtComponent);
+          const { usage } = increaseDebt(settledAmount, t.debtComponent);
           if (counted && t.debtComponent === 'PRINCIPAL')
-            total(r.metrics.debtUsage, linked!.currency as Currency, settledAmount);
+            total(r.metrics.debtUsage, linked!.currency as Currency, usage);
+          const spentCredit = settledAmount - usage;
+          if (counted && spentCredit > 0)
+            total(r.metrics.cashOutflow, linked!.currency as Currency, spentCredit);
         } else {
           affectCash(t, -settledAmount, a);
           if (a?.type !== 'SAVINGS') cashDelta = -settledAmount;
@@ -314,17 +323,17 @@ export class FinanceService {
           if (a?.type !== 'SAVINGS') cashDelta = settledAmount;
         }
       } else if (t.type === 'DEBT_USAGE') {
-        increaseDebt(amount, t.debtComponent);
+        const { usage } = increaseDebt(amount, t.debtComponent);
         affectCash(t, amount, a);
         if (a?.type !== 'SAVINGS') cashDelta = amount;
-        if (counted) total(r.metrics.debtUsage, c, amount);
+        if (counted) total(r.metrics.debtUsage, c, usage);
       } else if (t.type === 'DEBT_PAYMENT') {
-        increaseDebt(-amount);
+        const { payment } = increaseDebt(-amount);
         affectCash(t, -amount, a);
         if (a?.type !== 'SAVINGS') cashDelta = -amount;
         if (counted) {
-          total(r.metrics.debtPayments, c, amount);
-          total(r.metrics.cashOutflow, c, amount);
+          total(r.metrics.debtPayments, c, payment);
+          total(r.metrics.cashOutflow, c, payment);
         }
       } else if (t.type === 'ADJUSTMENT') {
         if (debt) increaseDebt(amount, t.debtComponent);
@@ -377,6 +386,9 @@ export class FinanceService {
       for (const a of rows.accounts)
         if (!liability(a)) total(running, a.currency as Currency, r.accounts.get(a.id) ?? 0);
       for (const [c, n] of Object.entries(r.virtualSavings)) total(running, c as Currency, n!);
+      for (const d of rows.debts)
+        if (d.type === 'CREDIT_CARD')
+          total(running, d.currency as Currency, Math.max(-r.debts.get(d.id)!.balance, 0));
       onTransaction?.(t, r);
     }
     r.metrics.availableCash = { ...r.unassigned };
@@ -394,8 +406,12 @@ export class FinanceService {
       }
     for (const [c, n] of Object.entries(r.virtualSavings))
       total(r.metrics.assets, c as Currency, n!);
-    for (const d of rows.debts)
-      total(r.metrics.debt, d.currency as Currency, r.debts.get(d.id)!.balance);
+    for (const d of rows.debts) {
+      const balance = r.debts.get(d.id)!.balance;
+      total(r.metrics.debt, d.currency as Currency, Math.max(balance, 0));
+      if (d.type === 'CREDIT_CARD' && balance < 0)
+        total(r.metrics.assets, d.currency as Currency, -balance);
+    }
     r.metrics.netFinancialPosition = { ...r.metrics.assets };
     for (const [c, n] of Object.entries(r.metrics.debt))
       total(r.metrics.netFinancialPosition, c as Currency, -n!);
@@ -734,7 +750,7 @@ export class FinanceService {
       currency: row.currency as Currency,
       openingBalance: decimal(liability(row) ? (d?.openingMinor ?? 0) : row.openingMinor),
       currentBalance: decimal(liability(row) ? -balance : balance),
-      currentDebt: liability(row) ? decimal(balance) : null,
+      currentDebt: liability(row) ? decimal(Math.max(balance, 0)) : null,
       creditLimit: row.creditLimitMinor == null ? null : decimal(row.creditLimitMinor),
       notes: row.notes ?? undefined,
       createdAt: row.createdAt,
@@ -808,10 +824,14 @@ export class FinanceService {
       this.db.update(schema.accounts).set(row).where(eq(schema.accounts.id, id)).run();
       if (isLiability) {
         const linked = this.rows().debts.find((d) => d.accountId === id)!;
-        const before = this.debtOutput(linked, this.replay());
+        const previous = this.replay(),
+          before = this.debtOutput(linked, previous),
+          rawBalance = previous.debts.get(linked.id)!.balance;
         const opening =
           input.currentDebt != null
-            ? add(minor(input.currentDebt), -add(minor(old.currentDebt!), -linked.openingMinor))
+            ? minor(input.currentDebt) === minor(old.currentDebt!)
+              ? linked.openingMinor
+              : add(minor(input.currentDebt), -add(rawBalance, -linked.openingMinor))
             : input.openingBalance != null
               ? minor(input.openingBalance)
               : linked.openingMinor;

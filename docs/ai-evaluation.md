@@ -1,6 +1,6 @@
 # Gerçek model değerlendirmesi
 
-`scripts/ai-evaluate.ts`, yapılandırılmış OpenAI modeliyle 25 bağımsız Türkçe finans senaryosunu yorumlar. Bu ücretli değerlendirme `npm test` içine dahil değildir. Birim ve entegrasyon testlerinin yanında modelin metni nasıl yorumladığını ve ortaya çıkan planın finans sonucunu denetler.
+`scripts/ai-evaluate.ts`, yapılandırılmış OpenAI modeliyle 29 bağımsız Türkçe finans senaryosunu yorumlar. Bu ücretli değerlendirme `npm test` içine dahil değildir. Birim ve entegrasyon testlerinin yanında modelin metni nasıl yorumladığını ve ortaya çıkan planın finans sonucunu denetler.
 
 Her senaryo ayrı `FinanceService(':memory:')` kullanır. Sunucu finans veya kimlik veritabanları açılmaz; mevcut AI yapılandırması yalnız uygulamanın kendi istemcisi aracılığıyla okunur. Sağlayıcıya giden bütün hesap, borç ve plan referansları kurgusaldır. Anahtar ve yapılandırma içeriği yazdırılmaz. Hatalı senaryoda yalnız hata ve kurgusal plan yazdırılır.
 
@@ -25,6 +25,7 @@ node --import tsx scripts/ai-evaluate.ts --case=paribu_missing_fx_total
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Hesaplar                  | BANK, CASH, WALLET, SAVINGS; açılış bakiyesi gelir sayılmaz; sahibi ve notu saklanır.                                                                                                             |
 | Kredi hesapları           | CREDIT_CARD ve OVERDRAFT; limit ve mevcut borç saklanır, yalnız bir bağlı borç oluşur.                                                                                                            |
+| Karta para yükleme        | DenizBank örneği, yeni borçsuz kart, mevcut borcu aşan ödeme, kart bakiyesinden alışveriş ve iade. Yalnız gerçek borç ödenen borç sayılır; fazla bakiye varlıktır, gelir/gider değildir.          |
 | Borçlar                   | LOAN, PERSONAL, OTHER; açılış borcu, limit ve not. Kredi kartı/KMH ilişkisi hesapla otomatik kurulur. Kredi kullanımı ve ödeme gelir/gider sayılmaz. Faiz ve masraf doğru bileşene gider.         |
 | Hareketler                | INCOME, EXPENSE, DEBT_PAYMENT, DEBT_USAGE, TRANSFER, SAVINGS, REFUND, ADJUSTMENT; dört döviz, ondalık tutar, gerçek TL tahsilatı ve açık kur.                                                     |
 | Hareket alanları          | Tarih/saat dilimi, kategori, kapsam, karşı taraf, ödeme yöntemi, not, kaynak/hedef hesap, borç, abonelik ve düzenli ödeme ilişkileri.                                                             |
@@ -38,6 +39,8 @@ Bu matris desteklenen finans alanlarından temsili uçtan uca örnekleri kapsar.
 
 ## 1 Ekim 2026 doğrulaması
 
-Son sürüm, yapılandırılmış gerçek OpenAI modeliyle 25/25 senaryoyu geçti. Uygulamayla aynı 20 saniye sınırı ve 2 eşzamanlı istek kullanıldı; başarısız çağrılar kendiliğinden tekrarlanmadı. Bütün finans kayıtları yalnız bellek içindeydi.
+Son sürüm, yapılandırılmış gerçek OpenAI modeliyle 29/29 senaryoyu geçti. Uygulamayla aynı 20 saniye sınırı ve 2 eşzamanlı istek kullanıldı; başarısız çağrılar kendiliğinden tekrarlanmadı. Bütün finans kayıtları yalnız bellek içindeydi. DenizBank borçsuz kart yüklemesi, yeni kart yüklemesi, borcu aşan ödeme ve kart bakiyesinden alışveriş/iade için dört senaryo eklendi. Son kaynak sürümünde 394 otomatik test de geçti.
 
 İlk değerlendirmelerde yakalanan bağlantı, birikim çekim yönü, eksi düzeltme tutarı, ödeme ayrıntısı devralma ve bilinen taslakların korunması hataları düzeltildi. Mevcut kayıtlara kısa, isteğe özel referans eşlemeleri eklendi; belirsiz eşlemeler engellendi. Ayrıca varsayılan dönem başlangıcı ile tarihsiz hareketlerin aynı zamanı kullanması ve hatalı veri türlerinin kayıttan önce reddedilmesi otomatik regresyon testleriyle doğrulandı.
+
+Kart yükleme doğrulamasındaki geniş yeniden değerlendirmede 28/29 sonuç alındı: Paribu'nun işlem sonrası kalan 10000 TL'si bir model yanıtında açılış bakiyesine de yazılmıştı. Açılışın yalnız işlem öncesini temsil ettiği açık örnekle güçlendirildi; ilgili senaryo ve ardından bütün 29 senaryo yeniden geçti. Kart bakiyesinden harcamanın nakit çıkışı ve işaretli borç değişiminin geçmiş tarihlerde güvenli hesaplama sınırı da bağımsız inceleme ve regresyon testleriyle düzeltildi.

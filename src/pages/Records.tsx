@@ -19,6 +19,10 @@ import type {
 } from '../../shared/types';
 import { accountNames, date, debtNames, frequencyNames, money } from '../format';
 import {
+  accountBalancePresentation,
+  debtBalancePresentation,
+} from '../components/balancePresentation';
+import {
   Button,
   Empty,
   IconButton,
@@ -170,10 +174,12 @@ export function Records({
                   ? (record as Subscription).service
                   : (record as Account | Debt | Obligation).name;
               const schedule = record as Obligation | Subscription;
-              const liability =
-                kind === 'accounts' &&
-                ((record as Account).type === 'CREDIT_CARD' ||
-                  (record as Account).type === 'OVERDRAFT');
+              const balance =
+                kind === 'accounts'
+                  ? accountBalancePresentation(record as Account)
+                  : kind === 'debts'
+                    ? debtBalancePresentation(record as Debt)
+                    : null;
               const at =
                 kind === 'subscriptions'
                   ? (record as Subscription).nextRenewal
@@ -268,19 +274,8 @@ export function Records({
                   ) : (
                     <>
                       <div className="record-balance">
-                        <span>
-                          {kind === 'debts' || liability ? 'Güncel borç' : 'Güncel bakiye'}
-                        </span>
-                        <strong>
-                          {money(
-                            kind === 'debts'
-                              ? (record as Debt).currentBalance
-                              : liability
-                                ? (record as Account).currentDebt
-                                : (record as Account).currentBalance,
-                            record.currency,
-                          )}
-                        </strong>
+                        <span>{balance!.label}</span>
+                        <strong>{money(balance!.amount, record.currency)}</strong>
                       </div>
                       {kind === 'accounts' && (
                         <div className="record-details">

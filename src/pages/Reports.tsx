@@ -4,6 +4,7 @@ import type { Cycle, FinancialContext, MoneyTotals } from '../../shared/types';
 import { useResource } from '../api';
 import { date, frequencyNames, money, statusNames } from '../format';
 import { CategoryChart, TrendChart } from '../components/LazyCharts';
+import { debtBalancePresentation } from '../components/balancePresentation';
 import {
   Button,
   Empty,
@@ -342,16 +343,22 @@ export function Reports({
                         </tr>
                       </thead>
                       <tbody>
-                        {data.debts.map((debt) => (
-                          <tr key={debt.id}>
-                            <td>{debt.name}</td>
-                            <td>{money(debt.currentBalance, debt.currency)}</td>
-                            <td>{money(debt.payments, debt.currency)}</td>
-                            <td>{money(debt.newUsage, debt.currency)}</td>
-                            <td>{money(debt.interest, debt.currency)}</td>
-                            <td>{money(debt.fees, debt.currency)}</td>
-                          </tr>
-                        ))}
+                        {data.debts.map((debt) => {
+                          const balance = debtBalancePresentation(debt);
+                          return (
+                            <tr key={debt.id}>
+                              <td>{debt.name}</td>
+                              <td>
+                                {money(balance.amount, debt.currency)}
+                                {balance.label === 'Kart bakiyesi' && ' (Kart bakiyesi)'}
+                              </td>
+                              <td>{money(debt.payments, debt.currency)}</td>
+                              <td>{money(debt.newUsage, debt.currency)}</td>
+                              <td>{money(debt.interest, debt.currency)}</td>
+                              <td>{money(debt.fees, debt.currency)}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
