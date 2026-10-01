@@ -25,7 +25,9 @@ Parola değişimi mevcut yetkili oturumu ve mevcut parolayı gerektirir; yeni pa
 
 Yanıt biçimi `{ "required": true, "authenticated": true, "user": { "email": "admin@example.com", "role": "ADMIN" } }` olur. Giriş yoksa `authenticated: false`, `user: null` döner. Yerel modda `required: false` olur. Kullanıcı kaydı veya API token oluşturma ucu yoktur; yönetici [sunucuda parola dosyasıyla](DEPLOYMENT.md) oluşturulur.
 
-Sunucu oturumu varsayılan 12 saat sürer. Tarayıcıya `__Host-finance_session` çerezi Secure, HttpOnly, SameSite=Strict ve Path=/ olarak gönderilir. Oturum belirteçleri auth veritabanında hash olarak tutulur. Çıkış ve yönetici parola sıfırlaması oturumları iptal eder. Finans verileri tarayıcı depolarında saklanmaz. Programatik HTTPS istekleri de giriş çerezini ve değiştiren isteklerde doğru Origin'i göndermelidir; parolayı kaynak koduna veya komut geçmişine yazmayın.
+Sunucu oturumu varsayılan 12 saat sürer. Mobil ve bilgisayarda aynı anda giriş yapılabilir; aynı IP adresini kullanmak oturumları birleştirmez. Yeni giriş yalnız aynı tarayıcının önceki çerezindeki oturumu değiştirir. Çıkış yalnız kullanılan tarayıcının oturumunu iptal eder; diğer cihaz açık kalır. Aynı tarayıcıdaki sekmeler giriş ve çıkışı paylaşır. Oturum süresi cihaz başına ayrı hesaplanır ve hizmet yeniden başlatılınca oturumlar korunur. Parola değişimi veya yönetici parola sıfırlaması tüm cihazların oturumlarını iptal eder.
+
+Tarayıcıya `__Host-finance_session` çerezi Secure, HttpOnly, SameSite=Strict ve Path=/ olarak gönderilir. Oturum belirteçleri auth veritabanında hash olarak tutulur. Finans verileri tarayıcı depolarında saklanmaz. Programatik HTTPS istekleri de giriş çerezini ve değiştiren isteklerde doğru Origin'i göndermelidir; parolayı kaynak koduna veya komut geçmişine yazmayın.
 
 ## Finans durumu ve raporlar
 

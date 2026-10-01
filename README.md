@@ -32,6 +32,8 @@ Veritabanı bu proje içindeki **`data/finance.sqlite`** dosyasıdır. SQLite ç
 
 `FINANCE_PUBLIC_URL` tanımlanmadığında yerel mod kullanılır; tarayıcıdan parola istenmez ve API yalnızca loopback'e bağlanır. Bu değişken `https://finance.example.com` gibi bir HTTPS kaynağına ayarlanırsa finans uçları yönetici oturumu gerektirir. Kayıt olma ve açık hesap oluşturma yoktur. Nginx/Hestia HTTPS trafiğini içerideki `127.0.0.1:4317` API'sine taşır; Node.js halka açık bir adrese bağlanmaz.
 
+Mobil ve bilgisayarda aynı anda oturum açık kalabilir. Yeni giriş veya çıkış diğer cihazı kapatmaz; aynı tarayıcıdaki sekmeler oturumu paylaşır. Her cihazın oturumu girişten itibaren 12 saat geçerlidir. Parola değişimi veya sıfırlaması tüm cihazlarda yeniden giriş gerektirir.
+
 Hedef yönetici e-postası **admin@example.com**. Yönetici oluşturmak veya parolayı sıfırlamak için parolayı komut satırına/ortam örneğine yazmayın. Yalnızca sahibi tarafından okunabilen, komutu çalıştıran kullanıcıya ait tek satırlı bir parola dosyası kullanın; parola en az 8 karakter olmalıdır:
 
 ```sh
