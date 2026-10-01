@@ -5,6 +5,7 @@ import { openDatabase } from './database';
 import * as schema from './schema';
 import { minor, decimal, add, converted } from './money';
 import { parseEntry } from './parser';
+import { labelDisplayName, labelNameKey } from './labelNames';
 import { CURRENCIES, TRANSACTION_TYPES, ACCOUNT_TYPES, DEBT_TYPES } from '../../shared/types';
 import type {
   Account,
@@ -131,13 +132,9 @@ const labelScanValidator = z
   )
   .max(5000);
 const labelValidator = z.object({
-  name: z
-    .string()
-    .transform((value) => value.trim().replace(/\s+/g, ' '))
-    .pipe(z.string().min(1).max(80)),
+  name: z.string().transform(labelDisplayName).pipe(z.string().min(1).max(80)),
   description: z.string().trim().max(500).nullable().optional(),
 });
-const labelNameKey = (value: string) => value.normalize('NFKC').toLocaleLowerCase('tr');
 function instant(value: string): string {
   if (
     !/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2}))?$/.test(
@@ -204,6 +201,7 @@ type Replay = {
     { balance: number; payments: number; newUsage: number; interest: number; fees: number }
   >;
   categories: Map<string, Totals>;
+  labels: Map<string | null, Totals>;
   scope: { PERSONAL: Totals; BUSINESS: Totals };
 };
 export class FinanceService {
@@ -272,6 +270,11 @@ export class FinanceService {
     if (!label) throw new Error('Etiket bulunamadı');
     return label;
   }
+  private existingLabelId(category?: string): string | undefined {
+    if (!category?.trim()) return undefined;
+    return this.listLabels().find((label) => labelNameKey(label.name) === labelNameKey(category))
+      ?.id;
+  }
   private uniqueLabelName(key: string, exceptId?: string) {
     if (
       this.db
@@ -306,9 +309,36 @@ export class FinanceService {
   updateLabel(id: string, input: Partial<LabelInput>): Label {
     return this.atomic(() => {
       const old = this.labelRecord(id);
-      const p = labelValidator.parse({ ...this.label(old), ...input });
+      const p = labelValidator
+        .extend({
+          name: z
+            .string()
+            .transform(labelDisplayName)
+            .pipe(
+              z
+                .string()
+                .min(1)
+                .refine(
+                  (value) => value === old.name || value.length <= 80,
+                  'Etiket adı en fazla 80 karakter olabilir',
+                ),
+            ),
+        })
+        .parse({ ...this.label(old), ...input });
       const normalizedName = labelNameKey(p.name);
       if (!old.archived) this.uniqueLabelName(normalizedName, id);
+      const oldKey = labelNameKey(old.name),
+        owner = this.db
+          .select()
+          .from(schema.labels)
+          .all()
+          .filter((label) => labelNameKey(label.name) === oldKey)
+          .sort(
+            (a, b) =>
+              Number(a.archived) - Number(b.archived) ||
+              a.createdAt.localeCompare(b.createdAt) ||
+              a.id.localeCompare(b.id),
+          )[0];
       const row = {
         ...old,
         name: p.name,
@@ -317,6 +347,42 @@ export class FinanceService {
         updatedAt: now(),
       };
       this.db.update(schema.labels).set(row).where(eq(schema.labels.id, id)).run();
+      // Name-only scheduled definitions follow the active-first catalog owner.
+      // Renaming an archived duplicate must not move definitions belonging to its active replacement.
+      if (old.name !== p.name && owner?.id === id) {
+        for (const before of this.db.select().from(schema.obligations).all()) {
+          if (labelNameKey(before.category) !== oldKey) continue;
+          const after = { ...before, category: p.name, updatedAt: updatedAfter(before.updatedAt) };
+          this.db
+            .update(schema.obligations)
+            .set({ category: after.category, updatedAt: after.updatedAt })
+            .where(eq(schema.obligations.id, before.id))
+            .run();
+          this.audit(
+            'OBLIGATION',
+            before.id,
+            'EDIT',
+            this.obligationOutput(before),
+            this.obligationOutput(after),
+          );
+        }
+        for (const before of this.db.select().from(schema.subscriptions).all()) {
+          if (labelNameKey(before.category) !== oldKey) continue;
+          const after = { ...before, category: p.name, updatedAt: updatedAfter(before.updatedAt) };
+          this.db
+            .update(schema.subscriptions)
+            .set({ category: after.category, updatedAt: after.updatedAt })
+            .where(eq(schema.subscriptions.id, before.id))
+            .run();
+          this.audit(
+            'SUBSCRIPTION',
+            before.id,
+            'EDIT',
+            this.subscriptionOutput(before),
+            this.subscriptionOutput(after),
+          );
+        }
+      }
       const result = this.label(row);
       this.audit('LABEL', id, 'EDIT', this.label(old), result);
       return result;
@@ -349,6 +415,7 @@ export class FinanceService {
       accounts: new Map(),
       debts: new Map(),
       categories: new Map(),
+      labels: new Map(),
       scope: { PERSONAL: {}, BUSINESS: {} },
     };
     const accounts = new Map(rows.accounts.map((a) => [a.id, a])),
@@ -491,6 +558,10 @@ export class FinanceService {
         const cat = r.categories.get(t.category) ?? {};
         total(cat, c, expense);
         r.categories.set(t.category, cat);
+        const labelId = t.labelId ?? null,
+          label = r.labels.get(labelId) ?? {};
+        total(label, c, expense);
+        r.labels.set(labelId, label);
         total(r.scope[t.scope as 'PERSONAL' | 'BUSINESS'], c, expense);
       }
       // Validate running asset sums, as well as individual stored balances.
@@ -647,6 +718,8 @@ export class FinanceService {
   ): schema.TransactionRow {
     const p = transactionValidator.parse(input),
       amount = minor(p.amount, p.type === 'ADJUSTMENT' || p.type === 'SAVINGS');
+    if (!previous && p.labelId === undefined && p.category?.trim())
+      p.labelId = this.existingLabelId(p.category);
     if (p.labelId) {
       const label = this.labelRecord(p.labelId);
       if (label.archived && previous?.labelId !== p.labelId)
@@ -1311,10 +1384,13 @@ export class FinanceService {
       if (o.status === 'PAID') throw new Error('Bu döneme ait ödeme zaten kaydedilmiş');
       if (input.type !== 'EXPENSE' || input.currency !== o.currency)
         throw new Error('Ödeme, düzenli ödemenin para biriminde bir gider olmalıdır');
+      const category = input.category ?? o.category;
       return this.createTransaction({
         ...input,
         accountId: input.accountId ?? o.accountId,
-        category: input.category ?? o.category,
+        category:
+          input.category === undefined && (category?.length ?? 0) > 100 ? undefined : category,
+        labelId: input.labelId === undefined ? this.existingLabelId(category) : input.labelId,
         scope: input.scope ?? o.scope,
         obligationId: id,
       });
@@ -1428,10 +1504,13 @@ export class FinanceService {
       if (s.status === 'PAID') throw new Error('Bu döneme ait ödeme zaten kaydedilmiş');
       if (input.type !== 'EXPENSE' || input.currency !== s.currency)
         throw new Error('Ödeme, aboneliğin para biriminde bir gider olmalıdır');
+      const category = input.category ?? s.category;
       return this.createTransaction({
         ...input,
         accountId: input.accountId ?? s.accountId,
-        category: input.category ?? s.category,
+        category:
+          input.category === undefined && (category?.length ?? 0) > 100 ? undefined : category,
+        labelId: input.labelId === undefined ? this.existingLabelId(category) : input.labelId,
         scope: input.scope ?? s.scope,
         subscriptionId: id,
       });
@@ -1598,6 +1677,8 @@ export class FinanceService {
         debtUsage: money(cell.debtUsage),
         debtPayments: money(cell.debtPayments),
       }));
+    const labels = this.listLabels(true),
+      labelNames = new Map(labels.map((label) => [label.id, label.name]));
     return {
       generatedAt: now(),
       currentCycle: cycle ?? null,
@@ -1613,7 +1694,12 @@ export class FinanceService {
       savings: metrics.savings,
       subscriptions: this.listSubscriptions(),
       recurringObligations: this.listObligations(),
-      labels: this.listLabels(true),
+      labels,
+      labelTotals: [...r.labels].map(([labelId, totals]) => ({
+        labelId,
+        label: labelId === null ? 'Etiketsiz' : (labelNames.get(labelId) ?? 'Etiket'),
+        totals: money(totals),
+      })),
       categoryTotals: [...r.categories].map(([category, totals]) => ({
         category,
         totals: money(totals),

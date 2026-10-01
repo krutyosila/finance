@@ -4802,3 +4802,40 @@ table {
     transform: rotate(90deg);
   }
 }
+.pull-refresh {
+  position: fixed;
+  top: calc(64px + var(--safe-top));
+  left: 50%;
+  z-index: 26;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: max-content;
+  max-width: calc(100vw - 40px);
+  padding: 11px 16px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 5px 24px rgb(0 0 0 / 12%);
+  font-size: 12px;
+  pointer-events: none;
+}
+.pull-refresh svg {
+  color: var(--teal);
+  transition: transform 150ms ease;
+}
+.pull-refresh[data-state='ready'] svg {
+  transform: rotate(180deg);
+}
+.pull-refresh[data-state='refreshing'] svg {
+  animation: spin 800ms linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pull-refresh svg {
+    transition: none;
+  }
+  .pull-refresh[data-state='refreshing'] svg {
+    animation: none;
+  }
+}

@@ -1,9 +1,12 @@
 import type { AiPlan, AiRecordDraft, AiRecordKind } from '../../shared/types';
 import type { AiReferences } from './client';
+import { labelNameKey } from '../../shared/labelNames';
 
 type AiReferenceKind = AiRecordKind | 'label';
 export const LABEL_REFERENCE_ISSUE =
   'Etiket bulunamadı; etkin bir etiket seçin veya etiketi kaldırın.';
+export const SCHEDULE_LABEL_REFERENCE_ISSUE =
+  'Planlı kayıtta seçilen etiket bulunamadı. Etkin bir etiket belirtin veya etiketi kaldırın.';
 export const AI_REFERENCE_KINDS: Record<string, AiReferenceKind> = {
   accountId: 'account',
   destinationAccountId: 'account',
@@ -52,6 +55,7 @@ export function prepareAiReferences(original: AiReferences) {
           ['CREDIT_CARD', 'OVERDRAFT'].includes(String(item.data.type))))
     );
   }
+  const scheduleLabels = new Set((original.labels ?? []).map((label) => labelNameKey(label.name)));
   return {
     references,
     resolve(plan: AiPlan): AiPlan {
@@ -61,33 +65,45 @@ export function prepareAiReferences(original: AiReferences) {
       const items = plan.items.map((item) => ({
         ...item,
         data: Object.fromEntries(
-          Object.entries(item.data).map(([field, value]) => {
-            const expected = AI_REFERENCE_KINDS[field];
-            if (!expected || typeof value !== 'string') return [field, value];
-            if (expected === 'label') {
-              const label = value.startsWith('@')
-                ? undefined
-                : (aliases.get('label')?.get(value) ??
-                  (persistent.get('label')?.has(value) ? value : undefined));
-              if (!label) labelIssues.push({ key: item.key, message: LABEL_REFERENCE_ISSUE });
-              return [field, label ?? value];
-            }
-            if (value.startsWith('@')) {
-              if (local.has(value.slice(1))) return [field, value];
-              return [field, aliases.get(expected)?.get(value.slice(1)) ?? value];
-            }
-            const existing =
-              aliases.get(expected)?.get(value) ??
-              (persistent.get(expected)?.has(value) ? value : undefined);
-            const samePlan = matches(local.get(value), expected);
-            if (existing && samePlan) {
-              issues.push(
-                'Bağlantı hem mevcut kaydı hem yeni plan kaydını gösteriyor. Hangi kayda ait olduğunu netleştirin.',
-              );
-              return [field, value];
-            }
-            return [field, existing ?? (samePlan ? `@${value}` : value)];
-          }),
+          Object.entries(item.data)
+            .map(([field, value]) => {
+              if (
+                field === 'category' &&
+                (item.kind === 'obligation' || item.kind === 'subscription') &&
+                typeof value === 'string' &&
+                value.trim() &&
+                !scheduleLabels.has(labelNameKey(value))
+              ) {
+                issues.push(SCHEDULE_LABEL_REFERENCE_ISSUE);
+                return [field, undefined];
+              }
+              const expected = AI_REFERENCE_KINDS[field];
+              if (!expected || typeof value !== 'string') return [field, value];
+              if (expected === 'label') {
+                const label = value.startsWith('@')
+                  ? undefined
+                  : (aliases.get('label')?.get(value) ??
+                    (persistent.get('label')?.has(value) ? value : undefined));
+                if (!label) labelIssues.push({ key: item.key, message: LABEL_REFERENCE_ISSUE });
+                return [field, label ?? value];
+              }
+              if (value.startsWith('@')) {
+                if (local.has(value.slice(1))) return [field, value];
+                return [field, aliases.get(expected)?.get(value.slice(1)) ?? value];
+              }
+              const existing =
+                aliases.get(expected)?.get(value) ??
+                (persistent.get(expected)?.has(value) ? value : undefined);
+              const samePlan = matches(local.get(value), expected);
+              if (existing && samePlan) {
+                issues.push(
+                  'Bağlantı hem mevcut kaydı hem yeni plan kaydını gösteriyor. Hangi kayda ait olduğunu netleştirin.',
+                );
+                return [field, value];
+              }
+              return [field, existing ?? (samePlan ? `@${value}` : value)];
+            })
+            .filter(([, value]) => value !== undefined),
         ),
       })) as AiRecordDraft[];
       return {

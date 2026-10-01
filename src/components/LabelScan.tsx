@@ -142,8 +142,8 @@ export function LabelScan({
             uygularsınız.
           </p>
           <p>
-            İşlem açıklamaları, kategoriler, karşı taraflar ve notlarla etkin etiket tanımları
-            OpenAI’ye gönderilir.
+            İşlem açıklamaları, önceki sınıflandırmalar, karşı taraflar ve notlarla etkin etiket
+            tanımları OpenAI’ye gönderilir.
           </p>
           {!hasLabels && <p>Tarama için önce bir etiket ekleyin.</p>}
         </div>
@@ -156,8 +156,8 @@ export function LabelScan({
           title={phase === 'scan' ? 'İşlemler taranıyor' : 'Etiket önerilerini gözden geçirin'}
           subtitle={
             phase === 'apply'
-              ? 'Onayladığınız etiket değişiklikleri uygulanıyor; tutarlar ve kategoriler korunur.'
-              : 'Tarama yalnızca öneri hazırlar. Etiketler siz uyguladığınızda güncellenir; tutarlar ve kategoriler korunur.'
+              ? 'Onayladığınız etiket değişiklikleri uygulanıyor; tutarlar ve hesaplar korunur.'
+              : 'Tarama yalnızca öneri hazırlar. Etiketler siz uyguladığınızda güncellenir; tutarlar ve hesaplar korunur.'
           }
           onClose={close}
           wide

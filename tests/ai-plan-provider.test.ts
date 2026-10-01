@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { OpenAiInterpreter } from '../server/ai/client';
+import { OpenAiInterpreter, TRANSACTION_OUTPUT_SCHEMA } from '../server/ai/client';
 import { AiSettingsService } from '../server/ai/settings';
 
 const roots: string[] = [];
@@ -55,6 +55,39 @@ const subscription = {
   },
 };
 describe('universal AI provider plans', () => {
+  it('uses a single managed transaction classification and discards a legacy provider category', async () => {
+    const draft = Object.fromEntries(
+      TRANSACTION_OUTPUT_SCHEMA.properties.draft.required.map((field) => [field, null]),
+    );
+    Object.assign(draft, {
+      type: 'EXPENSE',
+      amount: '100',
+      currency: 'TRY',
+      description: 'Koltuk',
+      category: 'Invented category',
+      labelId: 'existing_label_1',
+    });
+    const { model, fetcher } = client({ certain: true, issues: [], draft });
+    const result = await model.interpret('Mobilya 100 TL', {
+      accounts: [],
+      debts: [],
+      labels: [{ id: 'existing_label_1', name: 'Ev', description: null }],
+      date: '2026-10-01',
+      timeZone: 'Europe/Istanbul',
+    });
+    expect(result.draft).not.toHaveProperty('category');
+    expect(result.draft.labelId).toBe('existing_label_1');
+    const body = JSON.parse(
+      String((fetcher.mock.calls[0] as unknown as [string, RequestInit])[1].body),
+    );
+    expect(body.instructions).toContain(
+      'İşlemin tek sınıflandırması isteğe bağlı labelId alanıdır',
+    );
+    expect(body.instructions).toContain(
+      'her zaman gerçek JSON null bırak, serbest kategori üretme',
+    );
+    expect(body.instructions).not.toContain('kategoriden ayrı');
+  });
   it('transports a separate strict label classification request with untrusted text', async () => {
     const suggestions = [{ transactionId: 'existing_transaction_1', labelId: 'existing_label_1' }];
     const { model, fetcher } = client({ suggestions });

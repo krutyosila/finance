@@ -31,6 +31,7 @@ const output = process.env.MOBILE_QA_OUTPUT || join(tmpdir(), 'finance-mobile-qa
 const baseline = process.argv.includes('--baseline');
 const focusTheme = process.env.MOBILE_QA_FOCUS === 'theme';
 const focusLabels = process.env.MOBILE_QA_FOCUS === 'labels';
+const focusRefresh = process.env.MOBILE_QA_FOCUS === 'refresh';
 const skipThemeWorkflow = process.env.MOBILE_QA_SKIP_THEME_WORKFLOW === '1';
 const initialColorScheme = process.env.MOBILE_QA_THEME === 'dark' ? 'dark' : 'light';
 const stamp = '2026-10-01T12:00:00.000Z';
@@ -224,6 +225,11 @@ const fixture = {
     category,
     totals: total,
   })),
+  labelTotals: [
+    { labelId: 'qa-label-market', label: 'Market', totals: total },
+    { labelId: 'qa-label-work', label: 'İş', totals: total },
+    { labelId: null, label: 'Etiketsiz', totals: total },
+  ],
   recentTransactions: transactions,
   netFinancialPosition: total,
   transactionCount: transactions.length,
@@ -290,6 +296,10 @@ let releaseHeldScan;
 let heldCatalog;
 let releaseHeldCatalog;
 let lastAiConfirmation;
+const readRequests = [];
+const refreshReadHolds = new Map();
+const refreshFailurePaths = new Set();
+let mockAiSettings = { provider: 'openai', configured: true, model: 'gpt-5.4-mini' };
 
 function resetLabelFixtures() {
   labelCatalog.splice(0, labelCatalog.length, ...structuredClone(initialLabels));
@@ -301,6 +311,11 @@ function resetLabelFixtures() {
   releaseHeldCatalog?.();
   heldCatalog = undefined;
   lastAiConfirmation = undefined;
+  for (const hold of refreshReadHolds.values()) hold.release();
+  refreshReadHolds.clear();
+  refreshFailurePaths.clear();
+  readRequests.length = 0;
+  mockAiSettings = { provider: 'openai', configured: true, model: 'gpt-5.4-mini' };
 }
 
 function check(condition, message, detail) {
@@ -1528,11 +1543,426 @@ async function verifyLabelsWorkflow(page, mobile) {
   );
 }
 
+function holdRefreshReads(paths) {
+  for (const path of paths) {
+    let release;
+    const promise = new Promise((resolve) => {
+      release = resolve;
+    });
+    refreshReadHolds.set(path, { promise, release });
+  }
+  return {
+    release(path) {
+      refreshReadHolds.get(path)?.release();
+      refreshReadHolds.delete(path);
+    },
+    releaseAll() {
+      for (const path of paths) this.release(path);
+    },
+  };
+}
+
+async function refreshFrames(page) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+}
+
+async function touchGesture(page, options = {}) {
+  await page.evaluate(
+    ({
+      selector = '#main-content',
+      fromY = 180,
+      toY = 310,
+      fromX = 120,
+      toX = 120,
+      fingers = 1,
+      cancel = false,
+      cancelable = true,
+    }) => {
+      const target = document.querySelector(selector);
+      if (!target) throw new Error(`Gesture target missing: ${selector}`);
+      const touches = (x, y) =>
+        Array.from(
+          { length: fingers },
+          (_, identifier) =>
+            new Touch({
+              identifier,
+              target,
+              clientX: x + identifier * 20,
+              clientY: y,
+              pageX: x + identifier * 20,
+              pageY: y + scrollY,
+              screenX: x + identifier * 20,
+              screenY: y,
+            }),
+        );
+      const start = touches(fromX, fromY);
+      const moved = touches(toX, toY);
+      target.dispatchEvent(
+        new TouchEvent('touchstart', {
+          bubbles: true,
+          cancelable: true,
+          touches: start,
+          targetTouches: start,
+          changedTouches: start,
+        }),
+      );
+      target.dispatchEvent(
+        new TouchEvent('touchmove', {
+          bubbles: true,
+          cancelable,
+          touches: moved,
+          targetTouches: moved,
+          changedTouches: moved,
+        }),
+      );
+      target.dispatchEvent(
+        new TouchEvent(cancel ? 'touchcancel' : 'touchend', {
+          bubbles: true,
+          cancelable: true,
+          touches: [],
+          targetTouches: [],
+          changedTouches: moved,
+        }),
+      );
+    },
+    options,
+  );
+  await refreshFrames(page);
+}
+
+async function preparePull(page) {
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    scrollTo({ top: 0, behavior: 'instant' });
+  });
+  await refreshFrames(page);
+}
+
+async function startMockPull(page, paths) {
+  const before = readRequests.length;
+  const waits = paths.map((path) =>
+    page.waitForRequest(
+      (request) => request.method() === 'GET' && new URL(request.url()).pathname === `/api${path}`,
+    ),
+  );
+  await preparePull(page);
+  await touchGesture(page);
+  await Promise.all(waits);
+  await page.locator('.pull-refresh[data-state="refreshing"]').waitFor();
+  check(
+    paths.every((path) => readRequests.slice(before).some((read) => read.path === path)),
+    'pull refresh reads the active page resources',
+    readRequests.slice(before),
+  );
+  return before;
+}
+
+async function finishMockPull(page) {
+  await page.waitForFunction(
+    () => document.querySelector('.pull-refresh')?.dataset.state !== 'refreshing',
+  );
+  await refreshFrames(page);
+}
+
+async function verifyRefreshWorkflow(page, mobile) {
+  const writesBefore = transactionWrites + labelApplyRequests;
+  await go(page, 'dashboard');
+  currentScreen = 'refresh-dashboard';
+  if (!mobile) {
+    const before = readRequests.length;
+    await touchGesture(page);
+    check(readRequests.length === before, 'desktop touch does not start mobile pull refresh');
+    return;
+  }
+
+  let holds = holdRefreshReads(['/context']);
+  try {
+    await startMockPull(page, ['/context']);
+    check(
+      await page.locator('.pull-refresh[data-state="refreshing"]').isVisible(),
+      'dashboard refresh spinner remains visible while the context fetch is pending',
+    );
+    await screenshot(page, 'refresh-dashboard-pending');
+    const inFlightReads = readRequests.length;
+    await touchGesture(page);
+    check(
+      readRequests.length === inFlightReads,
+      'a second pull does not duplicate an in-flight refresh',
+    );
+    holds.releaseAll();
+    await finishMockPull(page);
+
+    await go(page, 'transactions');
+    currentScreen = 'refresh-transactions';
+    await page.getByRole('button', { name: 'Filtreler', exact: true }).click();
+    const labelFilter = page.locator('.filter-grid select:has(option[value="unassigned"])');
+    await labelFilter.selectOption('unassigned');
+    const search = page.getByRole('textbox', { name: 'İşlemlerde ara', exact: true });
+    await search.fill('İstanbul');
+    await page.waitForResponse(
+      (response) =>
+        response.url().includes('/transactions?') &&
+        new URL(response.url()).searchParams.get('search') === 'İstanbul',
+    );
+    await refreshFrames(page);
+    await page.locator('.filter-grid').evaluate((element) => {
+      element.dataset.qaIdentity = 'kept';
+    });
+    holds = holdRefreshReads(['/context', '/transactions']);
+    const transactionsBefore = await startMockPull(page, ['/context', '/transactions']);
+    holds.release('/context');
+    await refreshFrames(page);
+    check(
+      await page.locator('.pull-refresh[data-state="refreshing"]').isVisible(),
+      'transaction spinner waits for the transaction fetch after context finishes',
+    );
+    holds.releaseAll();
+    await finishMockPull(page);
+    check(
+      (await search.inputValue()) === 'İstanbul' &&
+        (await labelFilter.inputValue()) === 'unassigned' &&
+        (await page.locator('.filter-grid').getAttribute('data-qa-identity')) === 'kept',
+      'transaction search and filters survive refresh without remounting',
+    );
+    check(
+      readRequests
+        .slice(transactionsBefore)
+        .some(
+          (read) =>
+            read.path === '/transactions' &&
+            read.params.labelId === 'unassigned' &&
+            read.params.search === 'İstanbul',
+        ),
+      'refreshed transaction GET retains the active filter query',
+    );
+
+    refreshFailurePaths.add('/context');
+    holds = holdRefreshReads(['/context', '/transactions']);
+    await startMockPull(page, ['/context', '/transactions']);
+    holds.releaseAll();
+    await finishMockPull(page);
+    check(
+      (await search.inputValue()) === 'İstanbul' &&
+        (await labelFilter.inputValue()) === 'unassigned' &&
+        (await page.locator('.filter-grid').getAttribute('data-qa-identity')) === 'kept' &&
+        !(await page.locator('.connection-error').count()),
+      'context refresh failure retains the current page and filters',
+    );
+    refreshFailurePaths.clear();
+
+    await go(page, 'reports');
+    currentScreen = 'refresh-reports';
+    await page
+      .locator('.report-tabs')
+      .getByRole('button', { name: 'Etiketler', exact: true })
+      .click();
+    const period = page.locator('.report-controls select');
+    await period.selectOption('');
+    const dates = page.locator('.report-date-range input');
+    await dates.nth(0).fill('2026-10-01');
+    await dates.nth(1).fill('2026-10-05');
+    await page.waitForResponse(
+      (response) =>
+        response.url().includes('/reports?') &&
+        new URL(response.url()).searchParams.get('to') === '2026-10-05',
+    );
+    holds = holdRefreshReads(['/context', '/cycles', '/reports']);
+    const reportsBefore = await startMockPull(page, ['/context', '/cycles', '/reports']);
+    holds.release('/context');
+    holds.release('/cycles');
+    await refreshFrames(page);
+    check(
+      await page.locator('.pull-refresh[data-state="refreshing"]').isVisible(),
+      'report spinner waits for all context, cycles and report fetches',
+    );
+    holds.releaseAll();
+    await finishMockPull(page);
+    check(
+      (await period.inputValue()) === '' &&
+        (await dates.nth(0).inputValue()) === '2026-10-01' &&
+        (await dates.nth(1).inputValue()) === '2026-10-05' &&
+        (await page.locator('.report-tabs button[aria-pressed="true"]').innerText()) ===
+          'Etiketler',
+      'report tab and custom date range survive refresh',
+    );
+    check(
+      readRequests
+        .slice(reportsBefore)
+        .some(
+          (read) =>
+            read.path === '/reports' &&
+            read.params.from === '2026-10-01' &&
+            read.params.to === '2026-10-05',
+        ),
+      'refreshed report GET retains custom dates',
+    );
+
+    await go(page, 'settings');
+    currentScreen = 'refresh-settings';
+    const form = page.locator('.settings-form').first();
+    const model = form.locator('select').first();
+    const key = form.locator('input[name="openai-api-key"]');
+    mockAiSettings = { ...mockAiSettings, model: 'gpt-5.4-nano' };
+    holds = holdRefreshReads(['/context', '/settings/ai', '/labels']);
+    await startMockPull(page, ['/context', '/settings/ai', '/labels']);
+    holds.release('/context');
+    holds.release('/settings/ai');
+    await refreshFrames(page);
+    check(
+      await page.locator('.pull-refresh[data-state="refreshing"]').isVisible(),
+      'settings spinner waits for the label catalog as well as connection settings',
+    );
+    holds.releaseAll();
+    await finishMockPull(page);
+    await page.waitForFunction(
+      () => document.querySelector('.settings-form select')?.value === 'gpt-5.4-nano',
+    );
+    check(
+      (await model.inputValue()) === 'gpt-5.4-nano',
+      'clean settings form adopts the refreshed server model',
+    );
+    await model.selectOption('custom');
+    const customModel = form.locator('input:not([type="password"]):not([readonly])');
+    await customModel.fill('qa-user-draft-model');
+    await key.fill('qa-user-draft-key');
+    await form.evaluate((element) => {
+      element.dataset.qaIdentity = 'kept';
+    });
+    mockAiSettings = { ...mockAiSettings, model: 'gpt-5.4', configured: false };
+    holds = holdRefreshReads(['/context', '/settings/ai', '/labels']);
+    await startMockPull(page, ['/context', '/settings/ai', '/labels']);
+    holds.releaseAll();
+    await finishMockPull(page);
+    check(
+      (await model.inputValue()) === 'custom' &&
+        (await customModel.inputValue()) === 'qa-user-draft-model' &&
+        (await key.inputValue()) === 'qa-user-draft-key',
+      'pull refresh preserves unsaved model and API key drafts',
+    );
+    refreshFailurePaths.add('/settings/ai');
+    refreshFailurePaths.add('/labels');
+    holds = holdRefreshReads(['/context', '/settings/ai', '/labels']);
+    await startMockPull(page, ['/context', '/settings/ai', '/labels']);
+    holds.releaseAll();
+    await finishMockPull(page);
+    check(
+      (await form.getAttribute('data-qa-identity')) === 'kept' &&
+        (await customModel.inputValue()) === 'qa-user-draft-model' &&
+        (await key.inputValue()) === 'qa-user-draft-key' &&
+        (await page.locator('.label-settings-row').count()) === 2 &&
+        (await page.locator('.settings-panel .error-message').count()) >= 2,
+      'failed settings refresh retains the same form, drafts and label list',
+    );
+    refreshFailurePaths.clear();
+    await screenshot(page, 'refresh-settings-error-preserved');
+
+    const ignored = async (name, options = {}) => {
+      const before = readRequests.length;
+      await touchGesture(page, options);
+      check(
+        readRequests.length === before &&
+          !(await page.locator('.pull-refresh[data-state="refreshing"]').count()),
+        `${name} does not start a refresh`,
+      );
+    };
+    await preparePull(page);
+    await ignored('interactive control pull', { selector: 'input[name="openai-api-key"]' });
+    await ignored('horizontal swipe', { toX: 280, toY: 185 });
+    await ignored('upward swipe', { toY: 80 });
+    await ignored('multi-touch gesture', { fingers: 2 });
+    await ignored('cancelled pull', { cancel: true });
+    await ignored('short pull below the threshold', { toY: 205 });
+    await ignored('noncancelable native scroll', { cancelable: false });
+    await page.evaluate(() => scrollTo(0, 200));
+    await refreshFrames(page);
+    check((await page.evaluate(() => scrollY)) > 0, 'midpage guard is tested below page top');
+    await ignored('midpage downward swipe');
+    await preparePull(page);
+    await page.getByRole('button', { name: 'Etiket ekle', exact: true }).click();
+    await ignored('open label dialog pull');
+    await close(page);
+    await preparePull(page);
+    await page.getByRole('button', { name: 'Menüyü aç', exact: true }).click();
+    await ignored('open drawer pull');
+    await page.keyboard.press('Escape');
+    await page.locator('.sidebar-open').waitFor({ state: 'hidden' });
+    await preparePull(page);
+    await page.evaluate(() => {
+      const nested = document.createElement('div');
+      nested.id = 'qa-nested-scroll';
+      nested.style.cssText = 'height:50px;overflow-y:auto';
+      nested.innerHTML =
+        '<div id="qa-nested-scroll-child" style="height:200px">Nested scroll</div>';
+      document.querySelector('#main-content').append(nested);
+      nested.scrollTop = 20;
+    });
+    await ignored('nested scrolling panel pull', { selector: '#qa-nested-scroll-child' });
+    await page.evaluate(() => document.querySelector('#qa-nested-scroll').remove());
+    await page.context().setOffline(true);
+    await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+    await refreshFrames(page);
+    await ignored('offline pull');
+    await page.context().setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online')));
+    await refreshFrames(page);
+    check(
+      transactionWrites + labelApplyRequests === writesBefore,
+      'pull refresh and rejected gestures perform no financial or AI writes',
+    );
+    const legacyName = 'Eski plan etiketi '.padEnd(150, 'x');
+    labelCatalog.push({ ...initialLabels[0], id: 'qa-label-legacy-long', name: legacyName });
+    holds = holdRefreshReads(['/context', '/settings/ai', '/labels']);
+    await startMockPull(page, ['/context', '/settings/ai', '/labels']);
+    holds.releaseAll();
+    await finishMockPull(page);
+    await page.locator('#label-edit-qa-label-legacy-long').click();
+    const legacyDialog = page.getByRole('dialog');
+    await legacyDialog
+      .getByRole('textbox', { name: 'Etiket adı', exact: true })
+      .evaluate((input) => {
+        if (!input.checkValidity())
+          throw new Error('Untouched imported name is invalid in the editor');
+      });
+    await legacyDialog.locator('textarea').fill('Eski uzun adın güncellenen açıklaması');
+    await legacyDialog.getByRole('button', { name: 'Değişiklikleri kaydet', exact: true }).click();
+    await legacyDialog.waitFor({ state: 'hidden' });
+    check(
+      labelCatalog.find((label) => label.id === 'qa-label-legacy-long')?.name === legacyName &&
+        labelCatalog.find((label) => label.id === 'qa-label-legacy-long')?.description ===
+          'Eski uzun adın güncellenen açıklaması',
+      'an untouched imported long name allows description edits without truncation',
+    );
+    await widths(page, 'pull refresh layout');
+  } finally {
+    holds.releaseAll();
+    for (const hold of refreshReadHolds.values()) hold.release();
+    refreshReadHolds.clear();
+    refreshFailurePaths.clear();
+    await page.context().setOffline(false);
+    await page.evaluate(() => window.dispatchEvent(new Event('online'))).catch(() => {});
+  }
+}
+
 async function routeAPI(route) {
   const url = new URL(route.request().url());
   const path = url.pathname.replace(/^\/api/, '');
   const method = route.request().method();
   const input = method === 'GET' ? {} : route.request().postDataJSON() || {};
+  if (method === 'GET') {
+    readRequests.push({ path, params: Object.fromEntries(url.searchParams) });
+    const hold = refreshReadHolds.get(path);
+    if (hold) await hold.promise;
+    if (refreshFailurePaths.has(path)) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Örnek yenileme bağlantı hatası' }),
+      });
+      return;
+    }
+  }
   let data;
   let status = 200;
   if (path === '/auth/session')
@@ -1613,8 +2043,7 @@ async function routeAPI(route) {
     };
     status = 201;
   } else if (path === '/cycles') data = [cycle, { ...cycle, id: 'qa-previous-cycle', end: stamp }];
-  else if (path === '/settings/ai')
-    data = { provider: 'openai', configured: true, model: 'gpt-5.4-mini' };
+  else if (path === '/settings/ai') data = mockAiSettings;
   else if (path === '/ai/entry') {
     aiRequests++;
     const text = route.request().postDataJSON()?.text || '';
@@ -1782,6 +2211,14 @@ try {
       await context.close();
       continue;
     }
+    if (focusRefresh) {
+      await step('refresh', () => verifyRefreshWorkflow(page, mobile));
+      console.log(
+        `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
+      );
+      await context.close();
+      continue;
+    }
     for (const path of pages) {
       await step(path, async () => {
         await go(page, path);
@@ -1802,16 +2239,16 @@ try {
             'Harcamalar',
             'Borç',
             'Planlı giderler',
-            'Kategoriler',
+            'Etiketler',
             'İş ve kişisel',
             'Genel bakış',
           ]) {
             await page.locator('.report-tabs').getByRole('button', { name, exact: true }).click();
             await widths(page, `report ${name}`);
-            if (['Borç', 'Planlı giderler', 'Kategoriler'].includes(name))
+            if (['Borç', 'Planlı giderler', 'Etiketler'].includes(name))
               await screenshot(
                 page,
-                `report-${['Borç', 'Planlı giderler', 'Kategoriler'].indexOf(name)}`,
+                `report-${['Borç', 'Planlı giderler', 'Etiketler'].indexOf(name)}`,
               );
           }
           await page.locator('.report-controls select').selectOption('');

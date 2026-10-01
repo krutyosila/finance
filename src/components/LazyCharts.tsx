@@ -1,5 +1,9 @@
 import { lazy, Suspense, type ComponentProps } from 'react';
-import type { CategoryChart as CategoryChartType, TrendChart as TrendChartType } from './Charts';
+import type {
+  CategoryChart as CategoryChartType,
+  LabelChart as LabelChartType,
+  TrendChart as TrendChartType,
+} from './Charts';
 import { Loading, Panel } from './ui';
 
 const DeferredTrendChart = lazy(() =>
@@ -7,6 +11,9 @@ const DeferredTrendChart = lazy(() =>
 );
 const DeferredCategoryChart = lazy(() =>
   import('./Charts').then((module) => ({ default: module.CategoryChart })),
+);
+const DeferredLabelChart = lazy(() =>
+  import('./Charts').then((module) => ({ default: module.LabelChart })),
 );
 
 export function TrendChart(props: ComponentProps<typeof TrendChartType>) {
@@ -33,6 +40,20 @@ export function CategoryChart(props: ComponentProps<typeof CategoryChartType>) {
       }
     >
       <DeferredCategoryChart {...props} />
+    </Suspense>
+  );
+}
+
+export function LabelChart(props: ComponentProps<typeof LabelChartType>) {
+  return (
+    <Suspense
+      fallback={
+        <Panel className="category-panel">
+          <Loading text="Grafik hazırlanıyor…" />
+        </Panel>
+      }
+    >
+      <DeferredLabelChart {...props} />
     </Suspense>
   );
 }

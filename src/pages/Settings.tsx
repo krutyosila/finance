@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Check,
   KeyRound,
@@ -51,10 +51,9 @@ export function Settings({ onLabelsChanged }: { onLabelsChanged?: () => void }) 
           <LabelSettings onChanged={onLabelsChanged} />
         </Panel>
         <Panel className="settings-panel">
+          {settings.error && <ErrorMessage message={settings.error} retry={settings.refresh} />}
           {settings.loading && !settings.data ? (
             <Loading text="OpenAI ayarları yükleniyor…" />
-          ) : settings.error ? (
-            <ErrorMessage message={settings.error} retry={settings.refresh} />
           ) : settings.data ? (
             <AiConnectionForm initial={settings.data} />
           ) : null}
@@ -124,7 +123,21 @@ function AiConnectionForm({ initial }: { initial: AiSettings }) {
   const [confirmed, setConfirmed] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const seenInitial = useRef(initial);
   const dirty = model.trim() !== connection.model || !!apiKey.trim();
+  useEffect(() => {
+    if (seenInitial.current === initial) return;
+    seenInitial.current = initial;
+    if (dirty || busy) return;
+    if (initial.model === connection.model && initial.configured === connection.configured) return;
+    setConnection(initial);
+    setModel(initial.model);
+    setModelChoice(choiceForModel(initial.model));
+    setCustomModel(choiceForModel(initial.model) === 'custom' ? initial.model : '');
+    setConfirmed(false);
+    setMessage('');
+    setError('');
+  }, [initial, dirty, busy, connection]);
   function clearFeedback() {
     setConfirmed(false);
     setMessage('');

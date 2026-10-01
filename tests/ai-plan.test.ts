@@ -385,6 +385,8 @@ describe('atomic finance AI plans', () => {
         } as AiRecordDraft,
         account,
       ]);
+      const label = finance.createLabel({ name: 'Software' });
+      const originalAudit = finance.listAudit();
       const preview = await service.preview(plan.text);
       expect(preview.certain).toBe(true);
       expect(preview.items[0].data).toMatchObject({
@@ -392,8 +394,9 @@ describe('atomic finance AI plans', () => {
         category: 'Software',
         scope: 'BUSINESS',
       });
-      expect(finance.listAudit()).toHaveLength(0);
+      expect(finance.listAudit()).toEqual(originalAudit);
       expect(service.confirm(preview, `local-${kind}`).saved).toBe(true);
+      expect(finance.listTransactions()[0].labelId).toBe(label.id);
       expect(finance.listAccounts()[0].currentBalance).toBe('400.00');
     },
   );
@@ -434,6 +437,7 @@ describe('atomic finance AI plans', () => {
   });
   it('preserves explicit schedule-payment overrides', async () => {
     const { finance, service, plan } = setup([]);
+    const entertainment = finance.createLabel({ name: 'Entertainment' });
     const bank = finance.createAccount(account.data as never);
     const cash = finance.createAccount({
       name: 'Cash',
@@ -462,7 +466,7 @@ describe('atomic finance AI plans', () => {
           description: 'Payment',
           subscriptionId: schedule.id,
           accountId: cash.id,
-          category: 'Entertainment',
+          labelId: entertainment.id,
           scope: 'PERSONAL',
         },
       },
@@ -470,10 +474,11 @@ describe('atomic finance AI plans', () => {
     const preview = await service.preview(plan.text);
     expect(preview.items[0].data).toMatchObject({
       accountId: cash.id,
-      category: 'Entertainment',
+      labelId: entertainment.id,
       scope: 'PERSONAL',
     });
     expect(service.confirm(preview, 'override-payment').saved).toBe(true);
+    expect(finance.listTransactions()[0].labelId).toBe(entertainment.id);
     expect(finance.listAccounts().find((a) => a.id === bank.id)?.currentBalance).toBe('500.00');
     expect(finance.listAccounts().find((a) => a.id === cash.id)?.currentBalance).toBe('400.00');
   });

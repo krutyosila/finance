@@ -39,6 +39,9 @@ import { Settings } from './pages/Settings';
 import { useAuth } from './auth';
 import { InstallPanel, OfflineBanner, usePwa } from './pwa';
 import { useMobileViewport } from './viewport';
+import { createResourceRefreshCoordinator, ResourceRefreshProvider } from './resourceRefresh';
+import { usePullRefresh } from './pullRefresh';
+import { PullRefresh } from './components/PullRefresh';
 
 const navigation = [
   { title: 'Genel bakış', icon: LayoutDashboard, path: 'dashboard' },
@@ -98,9 +101,21 @@ export function App() {
   const [workspaceBusy, setWorkspaceBusy] = useState(false);
   const [reviewBusy, setReviewBusy] = useState(false);
   const resource = useResource<FinancialContext>('/context', revision);
+  const [pageRefresh] = useState(createResourceRefreshCoordinator);
   const context = resource.data;
   const close = useCallback(() => setMode(null), []);
   const notify = useCallback((message: string, error = false) => setToast({ message, error }), []);
+  const refreshPage = useCallback(async () => {
+    const results = await Promise.allSettled([resource.reload(), pageRefresh.refreshAll()]);
+    const failed = results.find((result) => result.status === 'rejected');
+    if (failed?.status === 'rejected') throw failed.reason;
+  }, [resource.reload, pageRefresh]);
+  const pullRefresh = usePullRefresh({
+    enabled: mobile && online && !mobileOpen && !mode,
+    page,
+    refresh: refreshPage,
+    onError: (error) => notify((error as Error).message || 'Sayfa yenilenemedi.', true),
+  });
   const openQuickEntry = useCallback(() => {
     if (context && online && !reviewBusy) {
       setMobileOpen(false);
@@ -403,102 +418,108 @@ export function App() {
             </IconButton>
           </div>
         </header>
-        <main id="main-content" className="main-content" tabIndex={-1}>
-          <OfflineBanner />
-          {page === 'Ayarlar' ? (
-            <Settings onLabelsChanged={() => setRevision((value) => value + 1)} />
-          ) : resource.error ? (
-            <div className="connection-error">
-              <Database size={34} />
-              <h1>Finansal alanınıza yeniden bağlanalım.</h1>
-              <p>
-                Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin. Yeni kayıtlar
-                sunucu bağlantısı gerektirir.
-              </p>
-              <ErrorMessage message={resource.error} retry={resource.refresh} />
-            </div>
-          ) : !context ? (
-            <Loading />
-          ) : (
-            <>
-              {page === 'Genel bakış' && (
-                <Dashboard
-                  context={context}
-                  onQuickEntry={openQuickEntry}
-                  navigate={navigate}
-                  onCreate={addRecord}
-                  onCycle={() => setMode({ kind: 'cycle' })}
-                  onEndCycle={() => setMode({ kind: 'cycle', end: true })}
-                  onTransaction={(record) => setMode({ kind: 'transaction', record })}
-                />
-              )}
-              {page === 'İşlemler' && (
-                <Transactions
-                  context={context}
-                  revision={revision}
-                  onAdd={() => setMode({ kind: 'transaction' })}
-                  onEdit={(record) => setMode({ kind: 'transaction', record })}
-                  onDelete={(record) =>
-                    setMode({ kind: 'delete', collection: 'transactions', record })
-                  }
-                  onRestore={(record) =>
-                    void action(`/transactions/${record.id}/restore`, 'İşlem geri yüklendi.')
-                  }
-                  onDuplicate={(record) =>
-                    void action(`/transactions/${record.id}/duplicate`, 'İşlem çoğaltıldı.')
-                  }
-                  onHistory={(record) =>
-                    setMode({ kind: 'history', id: record.id, name: record.description })
-                  }
-                />
-              )}
-              {['Hesaplar', 'Borçlar', 'Düzenli ödemeler', 'Abonelikler'].includes(page) && (
-                <Records
-                  kind={navigation.find((item) => item.title === page)!.path as RecordKind}
-                  context={context}
-                  onAdd={() =>
-                    addRecord(navigation.find((item) => item.title === page)!.path as RecordKind)
-                  }
-                  onEdit={(record) =>
-                    setMode({
-                      kind: 'record',
-                      collection: navigation.find((item) => item.title === page)!
-                        .path as RecordKind,
-                      record,
-                    })
-                  }
-                  onDelete={(record) =>
-                    setMode({
-                      kind: 'delete',
-                      collection: navigation.find((item) => item.title === page)!
-                        .path as RecordKind,
-                      record,
-                    })
-                  }
-                  onHistory={(record) =>
-                    setMode({ kind: 'history', id: record.id, name: recordName(record) })
-                  }
-                  onPay={(payPath, initial) =>
-                    setMode({ kind: 'transaction', initial, payPath: payPath || undefined })
-                  }
-                />
-              )}
-              {page === 'Raporlar' && (
-                <Reports
-                  context={context}
-                  revision={revision}
-                  onExport={() => {
-                    setWorkspaceResult('');
-                    setMode({ kind: 'workspace' });
-                    void exportRecords();
-                  }}
-                  onCycle={() => setMode({ kind: 'cycle' })}
-                  onEndCycle={() => setMode({ kind: 'cycle', end: true })}
-                />
-              )}
-            </>
-          )}
-        </main>
+        <PullRefresh {...pullRefresh} />
+        <ResourceRefreshProvider coordinator={pageRefresh}>
+          <main id="main-content" className="main-content" tabIndex={-1}>
+            <OfflineBanner />
+            {page === 'Ayarlar' ? (
+              <Settings onLabelsChanged={() => setRevision((value) => value + 1)} />
+            ) : resource.error && !context ? (
+              <div className="connection-error">
+                <Database size={34} />
+                <h1>Finansal alanınıza yeniden bağlanalım.</h1>
+                <p>
+                  Sunucuya ulaşılamadı. Bağlantınızı kontrol edip yeniden deneyin. Yeni kayıtlar
+                  sunucu bağlantısı gerektirir.
+                </p>
+                <ErrorMessage message={resource.error} retry={resource.refresh} />
+              </div>
+            ) : !context ? (
+              <Loading />
+            ) : (
+              <>
+                {resource.error && (
+                  <ErrorMessage message={resource.error} retry={resource.refresh} />
+                )}
+                {page === 'Genel bakış' && (
+                  <Dashboard
+                    context={context}
+                    onQuickEntry={openQuickEntry}
+                    navigate={navigate}
+                    onCreate={addRecord}
+                    onCycle={() => setMode({ kind: 'cycle' })}
+                    onEndCycle={() => setMode({ kind: 'cycle', end: true })}
+                    onTransaction={(record) => setMode({ kind: 'transaction', record })}
+                  />
+                )}
+                {page === 'İşlemler' && (
+                  <Transactions
+                    context={context}
+                    revision={revision}
+                    onAdd={() => setMode({ kind: 'transaction' })}
+                    onEdit={(record) => setMode({ kind: 'transaction', record })}
+                    onDelete={(record) =>
+                      setMode({ kind: 'delete', collection: 'transactions', record })
+                    }
+                    onRestore={(record) =>
+                      void action(`/transactions/${record.id}/restore`, 'İşlem geri yüklendi.')
+                    }
+                    onDuplicate={(record) =>
+                      void action(`/transactions/${record.id}/duplicate`, 'İşlem çoğaltıldı.')
+                    }
+                    onHistory={(record) =>
+                      setMode({ kind: 'history', id: record.id, name: record.description })
+                    }
+                  />
+                )}
+                {['Hesaplar', 'Borçlar', 'Düzenli ödemeler', 'Abonelikler'].includes(page) && (
+                  <Records
+                    kind={navigation.find((item) => item.title === page)!.path as RecordKind}
+                    context={context}
+                    onAdd={() =>
+                      addRecord(navigation.find((item) => item.title === page)!.path as RecordKind)
+                    }
+                    onEdit={(record) =>
+                      setMode({
+                        kind: 'record',
+                        collection: navigation.find((item) => item.title === page)!
+                          .path as RecordKind,
+                        record,
+                      })
+                    }
+                    onDelete={(record) =>
+                      setMode({
+                        kind: 'delete',
+                        collection: navigation.find((item) => item.title === page)!
+                          .path as RecordKind,
+                        record,
+                      })
+                    }
+                    onHistory={(record) =>
+                      setMode({ kind: 'history', id: record.id, name: recordName(record) })
+                    }
+                    onPay={(payPath, initial) =>
+                      setMode({ kind: 'transaction', initial, payPath: payPath || undefined })
+                    }
+                  />
+                )}
+                {page === 'Raporlar' && (
+                  <Reports
+                    context={context}
+                    revision={revision}
+                    onExport={() => {
+                      setWorkspaceResult('');
+                      setMode({ kind: 'workspace' });
+                      void exportRecords();
+                    }}
+                    onCycle={() => setMode({ kind: 'cycle' })}
+                    onEndCycle={() => setMode({ kind: 'cycle', end: true })}
+                  />
+                )}
+              </>
+            )}
+          </main>
+        </ResourceRefreshProvider>
       </div>
       <nav className="mobile-bottom-nav" aria-label="Hızlı gezinme" inert={mobileOpen}>
         {mobileNavigation.map((item, index) => (

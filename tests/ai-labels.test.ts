@@ -7,6 +7,7 @@ import { OpenAiInterpreter, TRANSACTION_OUTPUT_SCHEMA } from '../server/ai/clien
 import { FinanceService } from '../server/core/service';
 import { AiPlanService } from '../server/ai/plan';
 import { AiEntryService } from '../server/ai/entry';
+import { labelNameKey } from '../shared/labelNames';
 
 const fixtures: FinanceService[] = [];
 function financeFixture() {
@@ -47,6 +48,22 @@ function transactionDraft(labelId?: string | null): Partial<TransactionInput> {
 }
 
 describe('AI managed transaction label contract', () => {
+  it('discards a provider free transaction category while preserving its managed label', () => {
+    const transaction = PLAN_OUTPUT_SCHEMA.properties.items.items.anyOf.find(
+      (variant) => variant.properties.kind.enum[0] === 'transaction',
+    )!;
+    const data = Object.fromEntries(
+      transaction.properties.data.required.map((field) => [field, null]),
+    );
+    Object.assign(data, transactionDraft('existing_label_1'), { category: 'Invented category' });
+    const parsed = parsePlanOutput('Note', {
+      certain: true,
+      issues: [],
+      items: [{ key: 'x', kind: 'transaction', data }],
+    });
+    expect(parsed.items[0].data).not.toHaveProperty('category');
+    expect(parsed.items[0].data).toMatchObject({ labelId: 'existing_label_1' });
+  });
   it('supports a separate label classifier for existing transactions', () => {
     expect(OpenAiInterpreter.prototype.classifyLabels).toBeTypeOf('function');
   });
@@ -110,6 +127,313 @@ describe('AI managed transaction label contract', () => {
 });
 
 describe('managed labels through AI entry services', () => {
+  it.each([
+    { kind: 'obligation', samePlan: false },
+    { kind: 'subscription', samePlan: false },
+    { kind: 'obligation', samePlan: true },
+    { kind: 'subscription', samePlan: true },
+  ] as const)(
+    'pays imported long $kind labels (same plan: $samePlan) through their canonical ID',
+    async ({ kind, samePlan }) => {
+      const finance = financeFixture();
+      const name = 'Eski planlı etiket '.padEnd(150, 'x');
+      const time = '2026-10-01T09:00:00.000Z';
+      // The migration preserves old names beyond the new-label creation limit.
+      finance.sqlite
+        .prepare(
+          'INSERT INTO labels(id,name,normalized_name,archived,created_at,updated_at) VALUES(?,?,?,0,?,?)',
+        )
+        .run('imported-long-label', name, labelNameKey(name), time, time);
+      const definition = {
+        amount: '100',
+        currency: 'TRY' as const,
+        frequency: 'MONTHLY' as const,
+        category: name,
+        ...(kind === 'obligation'
+          ? { name: 'Kira', dueDate: '2026-10-15' }
+          : { service: 'İnternet', nextRenewal: '2026-10-15' }),
+      };
+      const scheduleId = samePlan
+        ? '@schedule'
+        : kind === 'obligation'
+          ? finance.createObligation(definition as never).id
+          : finance.createSubscription(definition as never).id;
+      const draft: AiPlan = {
+        text: 'Planlı ödemeyi kaydet',
+        certain: true,
+        issues: [],
+        items: [
+          ...(samePlan ? [{ key: 'schedule', kind, data: definition }] : []),
+          {
+            key: 'pay',
+            kind: 'transaction',
+            data: {
+              type: 'EXPENSE',
+              description: 'Ödeme',
+              amount: '100',
+              currency: 'TRY',
+              [kind === 'obligation' ? 'obligationId' : 'subscriptionId']: scheduleId,
+            },
+          },
+        ],
+      };
+      const service = new AiPlanService(finance, {
+        interpret: async () => {
+          throw Error('Legacy unused');
+        },
+        interpretPlan: async () => draft,
+      });
+      const preview = await service.preview(draft.text);
+      expect(preview.certain, preview.issues.join(' ')).toBe(true);
+      const payment = preview.items.find((item) => item.key === 'pay')!;
+      expect(payment.data).toMatchObject({ labelId: 'imported-long-label' });
+      expect(payment.data).not.toHaveProperty('category');
+      expect(service.confirm(preview, `long-schedule-${kind}-${samePlan}`).saved).toBe(true);
+      expect(finance.listTransactions()[0]).toMatchObject({
+        labelId: 'imported-long-label',
+        amount: '100.00',
+      });
+    },
+  );
+  it.each(['obligation', 'subscription'] as const)(
+    'blocks a %s classification outside the supplied active label catalog',
+    async (kind) => {
+      const finance = financeFixture();
+      finance.createLabel({ name: 'Ev' });
+      const draft: AiPlan = {
+        text: 'Ödeme planı',
+        certain: true,
+        issues: [],
+        items: [
+          {
+            key: 'schedule',
+            kind,
+            data: {
+              ...(kind === 'obligation'
+                ? { name: 'Kira', dueDate: '2026-10-15' }
+                : { service: 'Netflix', nextRenewal: '2026-10-15' }),
+              amount: '100',
+              currency: 'TRY',
+              frequency: 'MONTHLY',
+              category: 'Invented category',
+            },
+          },
+        ],
+      };
+      const service = new AiPlanService(finance, {
+        interpret: async () => {
+          throw Error('Legacy unused');
+        },
+        interpretPlan: async () => draft,
+      });
+      const preview = await service.preview(draft.text);
+      expect(preview.certain).toBe(false);
+      expect(preview.issues.join(' ')).toMatch(/etiket/i);
+      expect(preview.items[0].data).not.toHaveProperty('category');
+      expect(service.confirm(draft, `invalid-schedule-label-${kind}`).saved).toBe(false);
+      expect(finance.listLabels().map((item) => item.name)).toEqual(['Ev']);
+      expect(finance.listObligations()).toEqual([]);
+      expect(finance.listSubscriptions()).toEqual([]);
+    },
+  );
+
+  it('preserves an existing schedule label name and carries it into the paid transaction', async () => {
+    const finance = financeFixture();
+    const label = finance.createLabel({ name: 'Ev' });
+    const draft: AiPlan = {
+      text: 'Kira planla ve öde',
+      certain: true,
+      issues: [],
+      items: [
+        {
+          key: 'rent',
+          kind: 'obligation',
+          data: {
+            name: 'Kira',
+            amount: '100',
+            currency: 'TRY',
+            frequency: 'MONTHLY',
+            dueDate: '2026-10-15',
+            category: 'Ev',
+          },
+        },
+        {
+          key: 'pay',
+          kind: 'transaction',
+          data: {
+            type: 'EXPENSE',
+            description: 'Kira',
+            amount: '100',
+            currency: 'TRY',
+            obligationId: '@rent',
+          },
+        },
+      ],
+    };
+    const service = new AiPlanService(finance, {
+      interpret: async () => {
+        throw Error('Legacy unused');
+      },
+      interpretPlan: async () => draft,
+    });
+    const preview = await service.preview(draft.text);
+    expect(preview.certain).toBe(true);
+    expect(preview.items.find((item) => item.key === 'pay')?.data).toMatchObject({
+      labelId: label.id,
+    });
+    expect(service.confirm(preview, 'catalog-schedule-payment').saved).toBe(true);
+    expect(finance.listTransactions()[0].labelId).toBe(label.id);
+  });
+
+  it.each(['obligation', 'subscription'] as const)(
+    'shows an inherited %s label in preview and honors explicit Etiket yok at confirmation',
+    async (kind) => {
+      const finance = financeFixture();
+      const label = finance.createLabel({ name: 'Ev' });
+      const schedule =
+        kind === 'obligation'
+          ? finance.createObligation({
+              name: 'Kira',
+              amount: '100',
+              currency: 'TRY',
+              frequency: 'MONTHLY',
+              dueDate: '2026-10-15',
+              category: '  EV  ',
+            })
+          : finance.createSubscription({
+              service: 'Netflix',
+              amount: '100',
+              currency: 'TRY',
+              frequency: 'MONTHLY',
+              nextRenewal: '2026-10-15',
+              category: '  EV  ',
+            });
+      const draft: AiPlan = {
+        text: 'Ödemeyi kaydet',
+        certain: true,
+        issues: [],
+        items: [
+          {
+            key: 'pay',
+            kind: 'transaction',
+            data: {
+              type: 'EXPENSE',
+              description: 'Ödeme',
+              amount: '100',
+              currency: 'TRY',
+              [kind === 'obligation' ? 'obligationId' : 'subscriptionId']: schedule.id,
+            },
+          },
+        ],
+      };
+      const service = new AiPlanService(finance, {
+        interpret: async () => {
+          throw Error('Legacy unused');
+        },
+        interpretPlan: async () => draft,
+      });
+      const preview = await service.preview(draft.text);
+      expect(preview.certain).toBe(true);
+      expect(preview.items[0].data).toMatchObject({ labelId: label.id });
+      const clear = {
+        ...preview,
+        items: preview.items.map((item) =>
+          item.kind === 'transaction' ? { ...item, data: { ...item.data, labelId: null } } : item,
+        ),
+      };
+      expect(service.confirm(clear, `clear-scheduled-label-${kind}`).saved).toBe(true);
+      expect(finance.listTransactions()[0].labelId).toBeNull();
+      expect(finance.listTransactions()[0]).toMatchObject({ amount: '100.00', currency: 'TRY' });
+    },
+  );
+
+  it('preserves an explicit null label on an ordinary transaction through confirmation', () => {
+    const finance = financeFixture();
+    finance.createLabel({ name: 'Diğer' });
+    const service = new AiPlanService(finance, {
+      interpret: async () => {
+        throw Error('Unused');
+      },
+    });
+    expect(service.confirm(plan(null), 'clear-ordinary-label').saved).toBe(true);
+    expect(finance.listTransactions()[0].labelId).toBeNull();
+  });
+
+  it('revalidates a scheduled label archived after preview before creating any records', async () => {
+    const finance = financeFixture();
+    const label = finance.createLabel({ name: 'Ev' });
+    const draft: AiPlan = {
+      text: 'Kira planla',
+      certain: true,
+      issues: [],
+      items: [
+        {
+          key: 'rent',
+          kind: 'obligation',
+          data: {
+            name: 'Kira',
+            amount: '100',
+            currency: 'TRY',
+            frequency: 'MONTHLY',
+            dueDate: '2026-10-15',
+            category: 'Ev',
+          },
+        },
+      ],
+    };
+    const service = new AiPlanService(finance, {
+      interpret: async () => {
+        throw Error('Legacy unused');
+      },
+      interpretPlan: async () => draft,
+    });
+    const preview = await service.preview(draft.text);
+    expect(preview.certain).toBe(true);
+    finance.archiveLabel(label.id);
+    const confirmed = service.confirm(preview, 'archived-scheduled-label');
+    expect(confirmed.saved).toBe(false);
+    if (!confirmed.saved) expect(confirmed.confirmation.issues.join(' ')).toMatch(/etiket/i);
+    expect(finance.listObligations()).toEqual([]);
+  });
+  it('ignores free transaction categories from custom interpreters and confirmation payloads', async () => {
+    const finance = financeFixture();
+    const label = finance.createLabel({ name: 'Ev' });
+    const draft = plan('existing_label_1');
+    draft.items[0].data = { ...draft.items[0].data, category: 'Invented category' };
+    const service = new AiPlanService(finance, {
+      interpret: async () => {
+        throw Error('Legacy unused');
+      },
+      interpretPlan: async () => draft,
+    });
+    const preview = await service.preview(draft.text);
+    expect(preview.certain).toBe(true);
+    expect(preview.items[0].data).not.toHaveProperty('category');
+    preview.items[0].data = { ...preview.items[0].data, category: 'Other invented category' };
+    expect(service.confirm(preview, 'single-classification-confirm').saved).toBe(true);
+    expect(finance.listTransactions()[0]).toMatchObject({ labelId: label.id });
+    expect(finance.listTransactions()[0].category).not.toContain('invented');
+    expect(finance.listLabels().map((item) => item.name)).toEqual(['Ev']);
+  });
+
+  it('ignores a legacy interpreter free category instead of creating a second classification', async () => {
+    const finance = financeFixture();
+    const label = finance.createLabel({ name: 'Ev' });
+    const service = new AiEntryService(finance, {
+      interpret: async (text) => ({
+        text,
+        certain: true,
+        issues: [],
+        draft: { ...transactionDraft('existing_label_1'), category: 'Invented category' },
+      }),
+    });
+    const interpreted = await service.interpret('Mobilya 100 TL');
+    expect(interpreted.draft).not.toHaveProperty('category');
+    const result = await service.addText('Mobilya 100 TL', 'single-legacy-classification');
+    expect(result.saved).toBe(true);
+    expect(result.transaction?.labelId).toBe(label.id);
+    expect(finance.listLabels().map((item) => item.name)).toEqual(['Ev']);
+  });
   it('shares only active definitions and persists the selected label without changing category', async () => {
     const finance = financeFixture();
     const label = finance.createLabel({ name: 'Ev', description: 'Mobilya ve ev eşyaları' });

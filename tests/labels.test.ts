@@ -311,7 +311,7 @@ it('supports CLI label and unassigned transaction filters', async () => {
   }
 });
 
-it('migrates existing records additively and remains idempotent without seeding labels', () => {
+it('migrates existing records additively and backfills their legacy classification once', () => {
   const root = mkdtempSync(join(tmpdir(), 'finance-label-migration-'));
   roots.push(root);
   const path = join(root, 'legacy.sqlite');
@@ -342,11 +342,12 @@ it('migrates existing records additively and remains idempotent without seeding 
   for (let attempt = 0; attempt < 2; attempt++) {
     const reopened = new FinanceService(path);
     try {
-      expect(reopened.listLabels(true)).toEqual([]);
+      expect(reopened.listLabels(true)).toHaveLength(1);
+      expect(reopened.listLabels(true)[0].name).toBe('Dokunulmasın');
       expect(reopened.getTransaction('old-income')).toMatchObject({
         amount: '100.00',
         category: 'Dokunulmasın',
-        labelId: null,
+        labelId: reopened.listLabels(true)[0].id,
       });
       expect(reopened.getContext().metrics.availableCash).toEqual({ TRY: '100.00' });
       expect(

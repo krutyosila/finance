@@ -43,8 +43,8 @@ export function LabelSettings({ onChanged }: { onChanged?: () => void }) {
         </Button>
       </div>
       <p className="settings-hint">
-        Kategoriden ayrı olarak her işleme tek etiket seçebilirsiniz. Kısa açıklama, yapay zekânın
-        hızlı kayıtta uygun etiketi önermesine yardımcı olur.
+        Her işleme tek etiket seçebilirsiniz. Kısa açıklama, yapay zekânın hızlı kayıtta uygun
+        etiketi önermesine yardımcı olur.
       </p>
       <p className="settings-hint">
         Etkin etiket adları ve açıklamaları, notunuzu yorumlamak için OpenAI’ye gönderilir. Önerilen
@@ -55,11 +55,10 @@ export function LabelSettings({ onChanged }: { onChanged?: () => void }) {
           {notice}
         </p>
       )}
-      {resource.error ? (
-        <ErrorMessage message={resource.error} retry={resource.refresh} />
-      ) : resource.loading && !resource.data ? (
+      {resource.error && <ErrorMessage message={resource.error} retry={resource.refresh} />}
+      {resource.loading && !resource.data ? (
         <Loading text="Etiketler yükleniyor…" />
-      ) : !labels.length ? (
+      ) : !resource.data ? null : !labels.length ? (
         <p className="label-settings-empty">Henüz etiket yok. Etiket ekleyerek başlayın.</p>
       ) : (
         <ul className="label-settings-list" aria-label="Etkin etiketler">
@@ -94,7 +93,7 @@ export function LabelSettings({ onChanged }: { onChanged?: () => void }) {
           ))}
         </ul>
       )}
-      {resource.data && !resource.error && (
+      {resource.data && (
         <LabelScan
           labels={resource.data}
           onApplied={(updated) => changed(`${updated} işlemin etiketi güncellendi.`)}

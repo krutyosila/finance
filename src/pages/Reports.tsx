@@ -3,7 +3,7 @@ import { ArrowDownToLine, CalendarDays, ChartNoAxesCombined, FileText } from 'lu
 import type { Cycle, FinancialContext, MoneyTotals } from '../../shared/types';
 import { useResource } from '../api';
 import { date, frequencyNames, money, statusNames } from '../format';
-import { CategoryChart, TrendChart } from '../components/LazyCharts';
+import { LabelChart, TrendChart } from '../components/LazyCharts';
 import { debtBalancePresentation } from '../components/balancePresentation';
 import {
   Button,
@@ -24,7 +24,7 @@ const tabs = [
   'Harcamalar',
   'Borç',
   'Planlı giderler',
-  'Kategoriler',
+  'Etiketler',
   'İş ve kişisel',
 ] as const;
 type ReportTab = (typeof tabs)[number];
@@ -138,6 +138,7 @@ export function Reports({
           {context.currentCycle ? 'Aktif dönemi bitir' : 'Dönem başlat'}
         </Button>
       </Panel>
+      {cycles.error && <ErrorMessage message={cycles.error} retry={cycles.refresh} />}
       <div className="report-tabs" aria-label="Rapor türleri" role="group">
         {tabs.map((item) => (
           <button
@@ -150,10 +151,9 @@ export function Reports({
           </button>
         ))}
       </div>
-      {report.error ? (
-        <ErrorMessage message={report.error} retry={report.refresh} />
-      ) : !data ? (
-        <Loading text="Raporunuz hazırlanıyor…" />
+      {report.error && <ErrorMessage message={report.error} retry={report.refresh} />}
+      {!data ? (
+        !report.error && <Loading text="Raporunuz hazırlanıyor…" />
       ) : (
         <div aria-busy={report.loading} className="report-content">
           {tab === 'Genel bakış' && (
@@ -217,7 +217,7 @@ export function Reports({
               </Panel>
               <div className="charts-grid">
                 <TrendChart context={data} />
-                <CategoryChart context={data} />
+                <LabelChart context={data} />
               </div>
             </>
           )}
@@ -291,7 +291,7 @@ export function Reports({
               </Panel>
               <div className="charts-grid">
                 <TrendChart context={data} initial="daily" title="Günlük harcama" compact />
-                <CategoryChart context={data} />
+                <LabelChart context={data} />
               </div>
             </>
           )}
@@ -496,26 +496,26 @@ export function Reports({
               )}
             </Panel>
           )}
-          {tab === 'Kategoriler' && (
+          {tab === 'Etiketler' && (
             <>
-              <CategoryChart context={data} />
+              <LabelChart context={data} />
               <Panel>
                 <SectionHead
-                  title="Kategoriye göre harcamalar"
-                  description="Kategorilere göre net harcamalar, para birimleri ayrı ayrı."
+                  title="Etikete göre harcamalar"
+                  description="Etiketlere göre net harcamalar, para birimleri ayrı ayrı."
                 />
-                {!data.categoryTotals.length ? (
+                {!data.labelTotals?.length ? (
                   <Empty
                     compact
                     icon={<ChartNoAxesCombined size={25} />}
-                    title="Henüz harcama kategorisi yok"
-                    detail="Kategoriler, gerçek harcama ve iade kayıtlarınızdan oluşur."
+                    title="Henüz harcama etiketi yok"
+                    detail="Etiket dağılımı, gerçek harcama ve iade kayıtlarınızdan oluşur."
                   />
                 ) : (
                   <div className="report-metrics">
-                    {data.categoryTotals.map((item) => (
-                      <div key={item.category}>
-                        <strong>{item.category}</strong>
+                    {data.labelTotals.map((item) => (
+                      <div key={item.labelId === null ? 'unassigned' : `label:${item.labelId}`}>
+                        <strong>{item.label}</strong>
                         <Money totals={item.totals} />
                       </div>
                     ))}

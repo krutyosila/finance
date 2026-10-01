@@ -202,6 +202,7 @@ export interface FinancialContext {
   subscriptions: Subscription[];
   recurringObligations: Obligation[];
   labels?: CatalogLabel[];
+  labelTotals?: { labelId: string | null; label: string; totals: MoneyTotals }[];
   categoryTotals: { category: string; totals: MoneyTotals }[];
   recentTransactions: Transaction[];
   netFinancialPosition: MoneyTotals;

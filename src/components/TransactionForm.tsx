@@ -37,7 +37,6 @@ export function TransactionForm({
     currency: seed.currency || 'TRY',
     timestamp: localDateTime(originalInstant),
     description: seed.description || '',
-    category: seed.category || '',
     labelId: seed.labelId || '',
     accountId: seed.accountId || '',
     destinationAccountId: seed.destinationAccountId || '',
@@ -117,7 +116,6 @@ export function TransactionForm({
       currency: values.currency as TransactionInput['currency'],
       timestamp: transactionTimestamp(values.timestamp, originalInstant),
       description: values.description.trim(),
-      category: values.category.trim(),
       labelId: values.labelId || null,
       scope: values.scope as TransactionInput['scope'],
       accountId: values.accountId || null,
@@ -249,21 +247,7 @@ export function TransactionForm({
             {selectAccounts()}
           </select>
         </Field>
-        <Field label="Kategori">
-          <input
-            value={values.category}
-            onChange={change('category')}
-            placeholder="Örn. Market"
-            maxLength={120}
-            list="transaction-categories"
-          />
-          <datalist id="transaction-categories">
-            {context.categoryTotals.map((item) => (
-              <option key={item.category} value={item.category} />
-            ))}
-          </datalist>
-        </Field>
-        <Field label="Etiket" hint="Her işlem için tek etiket seçebilirsiniz; kategoriden ayrıdır.">
+        <Field label="Etiket" hint="Her işlem için tek etiket seçebilirsiniz.">
           <LabelSelect
             labels={context.labels}
             value={values.labelId}

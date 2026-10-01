@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import type { FinancialContext, Transaction } from '../../shared/types';
 import { date, money, typeNames } from '../format';
-import { CategoryChart, TrendChart } from '../components/LazyCharts';
+import { LabelChart, TrendChart } from '../components/LazyCharts';
 import { Button, Empty, LinkButton, Money, Panel, SectionHead, Tag } from '../components/ui';
 import { useAuth } from '../auth';
 
@@ -35,6 +35,7 @@ export function Dashboard({
   onTransaction: (transaction: Transaction) => void;
 }) {
   const { session } = useAuth();
+  const labelNames = new Map((context.labels ?? []).map((label) => [label.id, label.name]));
   const fresh = !context.transactionCount && !context.accounts.length && !context.debts.length;
   const metrics = [
     {
@@ -168,7 +169,7 @@ export function Dashboard({
       )}
       <div className="charts-grid">
         <TrendChart context={context} />
-        <CategoryChart context={context} />
+        <LabelChart context={context} />
       </div>
       <div className="dashboard-bottom">
         <Panel className="recent-panel">
@@ -202,8 +203,8 @@ export function Dashboard({
                   <span className="activity-description">
                     <strong>{transaction.description}</strong>
                     <small>
-                      {transaction.category || typeNames[transaction.type]} ·{' '}
-                      {date(transaction.timestamp)}
+                      {(transaction.labelId && labelNames.get(transaction.labelId)) || 'Etiketsiz'}{' '}
+                      · {date(transaction.timestamp)}
                     </small>
                   </span>
                   <span className="activity-amount">

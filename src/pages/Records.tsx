@@ -18,6 +18,7 @@ import type {
   TransactionInput,
 } from '../../shared/types';
 import { accountNames, date, debtNames, frequencyNames, money } from '../format';
+import { findCatalogLabel } from '../../shared/labelNames';
 import {
   accountBalancePresentation,
   debtBalancePresentation,
@@ -248,7 +249,11 @@ export function Records({
                       </div>
                       <div className="schedule-account">
                         <span>{accountName(schedule.accountId)}</span>
-                        <small>{schedule.category || 'Kategorisiz'}</small>
+                        <small>
+                          {findCatalogLabel(context.labels, schedule.category)?.name ||
+                            schedule.category ||
+                            'Etiketsiz'}
+                        </small>
                       </div>
                       <Button
                         variant="secondary"
@@ -259,7 +264,8 @@ export function Records({
                             amount: schedule.amount,
                             currency: schedule.currency,
                             description: name,
-                            category: schedule.category,
+                            labelId:
+                              findCatalogLabel(context.labels, schedule.category, true)?.id || null,
                             accountId: schedule.accountId,
                             scope: schedule.scope,
                             ...(kind === 'subscriptions'

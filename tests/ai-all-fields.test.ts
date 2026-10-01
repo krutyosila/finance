@@ -234,8 +234,10 @@ describe('universal AI entry field and ledger coverage', () => {
           },
         },
       ]);
+      finance.createLabel({ name: common.category });
+      const originalAudit = finance.listAudit();
       expect((await service.preview(plan.text)).certain).toBe(true);
-      expect(finance.listAudit()).toEqual([]);
+      expect(finance.listAudit()).toEqual(originalAudit);
       expect(service.confirm(plan, `schedule-${kind}-${frequency}`).saved).toBe(true);
       const schedule =
         kind === 'subscription' ? finance.listSubscriptions()[0] : finance.listObligations()[0];
@@ -359,7 +361,7 @@ describe('universal AI entry field and ledger coverage', () => {
       start: '2026-09-30T21:00:00.000Z',
     });
     expect(finance.listTransactions().find((t) => t.description === 'purchase')).toMatchObject({
-      category: 'Supplies',
+      labelId: null,
       timestamp: '2026-10-01T09:00:00.000Z',
       counterparty: 'Synthetic shop',
       paymentMethod: 'Bank card',
@@ -446,6 +448,7 @@ describe('universal AI entry field and ledger coverage', () => {
           data: { name: 'Business bank', type: 'BANK', currency: 'TRY', openingBalance: '500' },
         },
       ]);
+      const label = finance.createLabel({ name: kind === 'subscription' ? 'Software' : 'Rent' });
       const preview = await service.preview(plan.text);
       expect(preview.certain, preview.issues.join(' ')).toBe(true);
       expect(service.confirm(preview, `paid-${kind}-fields`).saved).toBe(true);
@@ -455,6 +458,7 @@ describe('universal AI entry field and ledger coverage', () => {
       expect(finance.listTransactions()[0]).toMatchObject({
         accountId: finance.listAccounts()[0].id,
         category: kind === 'subscription' ? 'Software' : 'Rent',
+        labelId: label.id,
         scope: 'BUSINESS',
         [linkField]: schedule.id,
         counterparty: 'Synthetic supplier',

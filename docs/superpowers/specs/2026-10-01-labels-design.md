@@ -1,6 +1,6 @@
 # Kullanıcı etiketleri ve AI seçimi
 
-Kullanıcı etiketlerini kendisi oluşturur; bir işlemde en fazla bir etiket bulunur. Bu seçim kullanıcı tarafından açıkça tercih edildi. Etiketler mevcut serbest kategori alanından ayrı işlem ayrıntısıdır; eski kayıtların kategorisi, para hareketi veya bakiyesi değiştirilmez.
+Kullanıcı etiketlerini kendisi oluşturur; bir işlemde en fazla bir etiket bulunur. Kullanıcının son düzeltmesine göre uygulamada tek sınıflandırma vardır ve görünen adı “Etiket”tir. İşlem formu, filtreler, ana sayfa, raporlar ve AI aynı kataloğu kullanır. Eski kategori adları bir defalık geçişte etiketlere bağlanır; açık etiket seçimleri ve önceden kasıtlı kaldırılmış etiketler korunur. Eski metin alanları geriye uyumluluk için saklanır; para hareketi, bakiye ve audit geçmişi değişmez.
 
 Ayarlarda etiket adı ve isteğe bağlı kısa açıklama yönetilir. Ad 1–80, açıklama en fazla 500 karakterdir. Yeni adlar boşluk ve Türkçe büyük/küçük harf açısından tekrar edemez. Etiket yeniden adlandırılırsa kimliği korunur. Arşivlenen etiket yeni seçimlerden çıkar; mevcut işlemlerde görünür kalır.
 
@@ -12,7 +12,7 @@ Kullanıcı sonradan geçmiş işlemler için “Tümünü tara” istedi. Ayarl
 
 Veri yapısı: `labels` tablosu ve `transactions.label_id` nullable bağlantısı. Ekleme, değiştirme ve arşivleme mevcut yetkili API altında çalışır. Etiket tanımları ve bağlantıları snapshot/CSV aktarımında korunur. AI planı yorumlanırken ve onaylanırken etiket tekrar doğrulanır; bu arada arşivlenmiş veya uydurulmuş bir kimlik sessizce kaydedilmez.
 
-Düzenli ödeme ve abonelik tanımlarına etiket ekleme, birden çok etiket, düzeltmelerden otomatik öğrenme ve yeni etiket raporları bu isteğin kapsamında değildir. Mevcut kategori raporları çalışmaya devam eder.
+Düzenli ödeme ve aboneliklerde görünen alan da “Etiket”tir ve mevcut katalog adlarından seçilir; mevcut kategori metni uyumluluk için saklanır. Ana sayfa ve raporlar gerçek harcama eksi iade tutarlarını etiket kimliğine göre, para birimleri ayrı olarak gösterir. Birden çok etiket ve düzeltmelerden otomatik öğrenme kapsam dışıdır.
 
 Doğrulama: eski veritabanına tekrar uygulanabilen eklemeli migration; etiket yönetimi, arşivlenmiş bağlantılar, geçersiz kimlikte atomik başarısızlık, bakiyelerin değişmemesi; AI referans gizliliği, doğru/yanlış/eski kimlik, manuel düzeltme; mobil/masaüstü açık/koyu tarayıcı akışı. Mevcut yayın yetkisi kapsamında test edilmiş sürüm canlıya alınır.
 

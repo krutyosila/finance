@@ -76,7 +76,7 @@ const fieldNames: Record<string, string> = {
   destinationAmount: 'Alınan tutar',
   amountTRY: 'Gerçek TRY tutarı',
   exchangeRate: 'TRY dönüşüm kuru',
-  category: 'Kategori',
+  category: 'Etiket',
   labelId: 'Etiket',
   notes: 'Notlar',
   owner: 'Hesap sahibi',
@@ -135,6 +135,7 @@ export function describeAiItem(item: AiRecordDraft, plan: AiPlan, context: Finan
   const data = item.data as Record<string, unknown>;
   const fields: [string, string][] = [];
   for (const [field, value] of Object.entries(data)) {
+    if (item.kind === 'transaction' && field === 'category') continue;
     if (value === undefined || value === null || value === '') continue;
     let label = String(value);
     if (field === 'labelId') {

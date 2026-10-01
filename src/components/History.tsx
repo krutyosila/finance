@@ -7,7 +7,8 @@ import { Empty, ErrorMessage, Loading, Tag } from './ui';
 const names: Record<string, string> = {
   amount: 'Tutar',
   currency: 'Para birimi',
-  category: 'Kategori',
+  category: 'Etiket',
+  labelId: 'Etiket',
   description: 'Açıklama',
   timestamp: 'Tarih',
   type: 'Tür',
@@ -34,6 +35,11 @@ const names: Record<string, string> = {
 };
 export function History({ entityId, context }: { entityId: string; context?: FinancialContext }) {
   function value(input: unknown, key: string, source: Record<string, unknown>) {
+    if (key === 'labelId') {
+      if (!input) return 'Etiket yok';
+      const label = context?.labels?.find((label) => label.id === input);
+      return label ? `${label.name}${label.archived ? ' (arşivlenmiş)' : ''}` : 'Kayıtlı etiket';
+    }
     if (input === null || input === undefined || input === '') return '—';
     if (typeof input === 'boolean') return input ? 'Evet' : 'Hayır';
     if (typeof input === 'object') return JSON.stringify(input);
@@ -92,7 +98,14 @@ export function History({ entityId, context }: { entityId: string; context?: Fin
             const before = (item.before || {}) as Record<string, unknown>;
             const after = (item.after || {}) as Record<string, unknown>;
             const fields = [...new Set([...Object.keys(before), ...Object.keys(after)])].filter(
-              (key) => names[key] && JSON.stringify(before[key]) !== JSON.stringify(after[key]),
+              (key) =>
+                names[key] &&
+                !(
+                  key === 'category' &&
+                  item.entity === 'TRANSACTION' &&
+                  (Object.hasOwn(before, 'labelId') || Object.hasOwn(after, 'labelId'))
+                ) &&
+                JSON.stringify(before[key]) !== JSON.stringify(after[key]),
             );
             return (
               <article key={item.id}>

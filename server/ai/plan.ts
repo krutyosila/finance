@@ -11,6 +11,7 @@ import type {
   TransactionInput,
 } from '../../shared/types';
 import type { FinanceService } from '../core/service';
+import { labelNameKey } from '../../shared/labelNames';
 import type { AiInterpreter, AiReferences } from './client';
 import { minor } from '../core/money';
 import { AiError } from './errors';
@@ -21,6 +22,7 @@ import { prepareAccountChain } from './account-chain';
 import {
   AI_REFERENCE_KINDS as referenceKinds,
   LABEL_REFERENCE_ISSUE,
+  SCHEDULE_LABEL_REFERENCE_ISSUE,
   prepareAiReferences,
 } from './references';
 const kindLabels: Record<AiRecordKind, string> = {
@@ -109,6 +111,7 @@ function parse(value: unknown): AiPlan {
       if (value != null && typeof value !== expectedType)
         throw new AiError('Plan alanlarının türü geçersiz. Alanları gözden geçirin.', 400);
     }
+    if (item.kind === 'transaction') delete item.data.category;
   }
   return parsed as AiPlan;
 }
@@ -189,6 +192,28 @@ export class AiPlanService {
     }
     return { ...plan, labelIssues: [...labelIssues.values()] };
   }
+  private validateScheduleLabels(plan: AiPlan): AiPlan {
+    const activeNames = new Set(this.finance.listLabels().map((label) => labelNameKey(label.name)));
+    const issues = [...plan.issues];
+    const items = plan.items.map((item) => {
+      if (
+        (item.kind === 'obligation' || item.kind === 'subscription') &&
+        item.data.category?.trim() &&
+        !activeNames.has(labelNameKey(item.data.category))
+      ) {
+        issues.push(SCHEDULE_LABEL_REFERENCE_ISSUE);
+        const { category: _category, ...data } = item.data;
+        return { ...item, data };
+      }
+      return item;
+    });
+    return {
+      ...plan,
+      items,
+      issues: [...new Set(issues)],
+      certain: plan.certain && !issues.length,
+    };
+  }
   private invalid(plan: AiPlan, error: unknown): AiPlan {
     if (error instanceof AiError || error instanceof AuthError) throw error;
     return {
@@ -205,6 +230,9 @@ export class AiPlanService {
     };
   }
   private scheduleDefaults(plan: AiPlan): AiPlan {
+    const activeLabels = new Map(
+      this.finance.listLabels().map((label) => [labelNameKey(label.name), label.id]),
+    );
     return {
       ...plan,
       items: plan.items.map((item) => {
@@ -222,15 +250,20 @@ export class AiPlanService {
             ? this.finance.listObligations().find((record) => record.id === reference)
             : this.finance.listSubscriptions().find((record) => record.id === reference);
         if (!schedule) return item;
+        const category =
+          item.data.category ??
+          schedule.category ??
+          (kind === 'obligation' ? 'Düzenli ödeme' : 'Abonelikler');
         return {
           ...item,
           data: {
             ...item.data,
             accountId: item.data.accountId ?? schedule.accountId ?? null,
-            category:
-              item.data.category ??
-              schedule.category ??
-              (kind === 'obligation' ? 'Düzenli ödeme' : 'Abonelikler'),
+            ...(category.length <= 100 ? { category } : {}),
+            labelId:
+              item.data.labelId === undefined
+                ? (activeLabels.get(labelNameKey(category)) ?? null)
+                : item.data.labelId,
             scope: item.data.scope ?? schedule.scope ?? 'PERSONAL',
           },
         };
@@ -250,7 +283,10 @@ export class AiPlanService {
       }),
     );
     plan = this.validateLabels(
-      prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts()),
+      prepareAccountChain(
+        this.scheduleDefaults(this.validateScheduleLabels(plan)),
+        this.finance.listAccounts(),
+      ),
       true,
     );
     if (!plan.certain || plan.issues.length) return { ...plan, certain: false };
@@ -298,7 +334,10 @@ export class AiPlanService {
             return JSON.parse(row.result_json) as AiPlanResult;
           }
           confirmation = this.validateLabels(
-            prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts()),
+            prepareAccountChain(
+              this.scheduleDefaults(this.validateScheduleLabels(plan)),
+              this.finance.listAccounts(),
+            ),
           );
           if (!confirmation.certain || confirmation.issues.length)
             return { saved: false, confirmation: { ...confirmation, certain: false } };
@@ -423,7 +462,10 @@ export class AiPlanService {
       if (index < 0) throw Error('Yerel referans bulunamadı veya döngü içeriyor.');
       const item = pending.splice(index, 1)[0];
       const data = Object.fromEntries(
-        Object.entries(item.data).filter(([, value]) => value != null),
+        Object.entries(item.data).filter(
+          ([field, value]) =>
+            value != null || (item.kind === 'transaction' && field === 'labelId' && value === null),
+        ),
       ) as Record<string, unknown>;
       for (const [field, expected] of Object.entries(referenceKinds)) {
         if (data[field] == null) continue;

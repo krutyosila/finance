@@ -66,6 +66,7 @@ export class AiEntryService {
         ...(resolved.labelIssues ?? []).map((issue) => issue.message),
       ],
       draft = { ...resolved.items[0].data } as ParseResult['draft'];
+    delete draft.category;
     if (
       draft.labelId != null &&
       !this.finance.listLabels().some((label) => label.id === draft.labelId)

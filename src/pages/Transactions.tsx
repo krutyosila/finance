@@ -57,7 +57,6 @@ export function Transactions({
   const [filters, setFilters] = useState({
     type: '',
     currency: '',
-    category: '',
     labelId: '',
     accountId: '',
     from: '',
@@ -110,7 +109,7 @@ export function Transactions({
               aria-label="İşlemlerde ara"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Açıklama, kategori veya notlarda ara…"
+              placeholder="Açıklama, etiket veya notlarda ara…"
             />
             {search && (
               <IconButton label="Aramayı temizle" onClick={() => setSearch('')}>
@@ -173,14 +172,6 @@ export function Transactions({
               </select>
             </label>
             <label>
-              Kategori
-              <input
-                value={filters.category}
-                onChange={change('category')}
-                placeholder="Tüm kategoriler"
-              />
-            </label>
-            <label>
               Etiket
               <select value={filters.labelId} onChange={change('labelId')}>
                 <option value="">Tüm etiketler</option>
@@ -215,7 +206,6 @@ export function Transactions({
                 setFilters({
                   type: '',
                   currency: '',
-                  category: '',
                   labelId: '',
                   accountId: '',
                   from: '',
@@ -230,11 +220,12 @@ export function Transactions({
             </Button>
           </div>
         )}
-        {error ? (
-          <ErrorMessage message={error} retry={refresh} />
-        ) : loading && !records ? (
-          <Loading />
-        ) : !records?.length ? (
+        {error && <ErrorMessage message={error} retry={refresh} />}
+        {!records ? (
+          error ? null : (
+            <Loading />
+          )
+        ) : !records.length ? (
           <Empty
             icon={hasFilters ? <Filter size={27} /> : <ReceiptIcon />}
             title={
@@ -307,10 +298,6 @@ export function Transactions({
                           </span>
                           <span>
                             <strong>{transaction.description}</strong>
-                            <small>
-                              {transaction.category || 'Kategorisiz'}
-                              {transaction.scope === 'BUSINESS' ? ' · İş' : ''}
-                            </small>
                             {transaction.labelId && (
                               <span
                                 className="transaction-label-badge"
@@ -320,6 +307,7 @@ export function Transactions({
                                 <span>{labelName(transaction.labelId)}</span>
                               </span>
                             )}
+                            {transaction.scope === 'BUSINESS' && <small>İş</small>}
                           </span>
                         </button>
                       </td>

@@ -15,7 +15,12 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { CURRENCIES, type Currency, type FinancialContext } from '../../shared/types';
+import {
+  CURRENCIES,
+  type Currency,
+  type FinancialContext,
+  type MoneyTotals,
+} from '../../shared/types';
 import { money, shortDate } from '../format';
 import { Empty, Panel, SectionHead } from './ui';
 
@@ -244,30 +249,69 @@ export function TrendChart({
 }
 
 export function CategoryChart({ context }: { context: FinancialContext }) {
+  return (
+    <SpendingChart
+      groups={context.categoryTotals.map((item) => ({
+        id: item.category,
+        name: item.category,
+        totals: item.totals,
+      }))}
+      grouping="category"
+    />
+  );
+}
+
+export function LabelChart({ context }: { context: FinancialContext }) {
+  return (
+    <SpendingChart
+      groups={(context.labelTotals ?? []).map((item) => ({
+        id: item.labelId === null ? 'unassigned' : `label:${item.labelId}`,
+        name: item.label,
+        totals: item.totals,
+      }))}
+      grouping="label"
+    />
+  );
+}
+
+function SpendingChart({
+  groups,
+  grouping,
+}: {
+  groups: { id: string; name: string; totals: MoneyTotals }[];
+  grouping: 'category' | 'label';
+}) {
   const [selected, setSelected] = useState<Currency>('TRY');
   const currencies = CURRENCIES.filter((currency) =>
-    context.categoryTotals.some((category) => Number(category.totals[currency] || 0) > 0),
+    groups.some((group) => Number(group.totals[currency] || 0) > 0),
   );
   const currency = currencies.includes(selected) ? selected : currencies[0] || 'TRY';
-  const rows = context.categoryTotals
-    .filter((category) => Number(category.totals[currency] || 0) > 0)
-    .map((category) => ({
-      name: category.category,
-      value: Number(category.totals[currency]),
-      amount: category.totals[currency]!,
+  const rows = groups
+    .filter((group) => Number(group.totals[currency] || 0) > 0)
+    .map((group) => ({
+      id: group.id,
+      name: group.name,
+      value: Number(group.totals[currency]),
+      amount: group.totals[currency]!,
     }));
   return (
     <Panel className="category-panel">
       <SectionHead
         title="Harcama dağılımı"
-        description="Kategorilere göre gerçek harcamalar."
+        description={
+          grouping === 'label'
+            ? 'Etiketlere göre gerçek harcamalar.'
+            : 'Kategorilere göre gerçek harcamalar.'
+        }
         action={
           currencies.length > 0 ? (
             <select
               className="small-select"
               value={currency}
               onChange={(event) => setSelected(event.target.value as Currency)}
-              aria-label="Kategori grafiği para birimi"
+              aria-label={
+                grouping === 'label' ? 'Etiket grafiği para birimi' : 'Kategori grafiği para birimi'
+              }
             >
               {currencies.map((item) => (
                 <option key={item}>{item}</option>
@@ -281,14 +325,18 @@ export function CategoryChart({ context }: { context: FinancialContext }) {
           compact
           icon={<BarChart3 size={24} />}
           title="Büyük resme yer açın"
-          detail="Harcama ekledikçe kategorileriniz burada görünür."
+          detail={
+            grouping === 'label'
+              ? 'Harcama ekledikçe etiketleriniz burada görünür.'
+              : 'Harcama ekledikçe kategorileriniz burada görünür.'
+          }
         />
       ) : (
         <>
           <div
             className="donut-canvas"
             role="img"
-            aria-label={`${currency} cinsinden harcama kategorileri`}
+            aria-label={`${currency} cinsinden harcama ${grouping === 'label' ? 'etiketleri' : 'kategorileri'}`}
           >
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -303,7 +351,7 @@ export function CategoryChart({ context }: { context: FinancialContext }) {
                   isAnimationActive={false}
                 >
                   {rows.map((row, index) => (
-                    <Cell key={row.name} fill={PALETTE[index % PALETTE.length]} />
+                    <Cell key={row.id} fill={PALETTE[index % PALETTE.length]} />
                   ))}
                 </Pie>
                 <Tooltip
@@ -318,7 +366,7 @@ export function CategoryChart({ context }: { context: FinancialContext }) {
           </div>
           <div className="category-legend">
             {rows.map((row, index) => (
-              <div key={row.name}>
+              <div key={row.id}>
                 <span>
                   <i style={{ background: PALETTE[index % PALETTE.length] }} />
                   {row.name}

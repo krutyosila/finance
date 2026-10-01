@@ -10,6 +10,7 @@ import {
   type Subscription,
 } from '../../shared/types';
 import { api } from '../api';
+import { findCatalogLabel } from '../../shared/labelNames';
 import { accountNames, dateInput, debtNames, frequencyNames } from '../format';
 import { ErrorMessage, Field, FormFooter } from './ui';
 
@@ -54,7 +55,9 @@ export function RecordForm({
         : (record as Obligation | undefined)?.dueDate,
     ),
     accountId: (isDebt ? debt?.accountId : scheduled ? schedule?.accountId : '') || '',
-    category: scheduled ? schedule?.category || '' : '',
+    category: scheduled
+      ? findCatalogLabel(context.labels, schedule?.category)?.name || schedule?.category || ''
+      : '',
     scope: scheduled ? schedule?.scope || 'PERSONAL' : 'PERSONAL',
     active: scheduled ? (schedule?.active ?? true) : true,
   });
@@ -115,6 +118,7 @@ export function RecordForm({
     }
   }
   const liability = isAccount && (values.type === 'CREDIT_CARD' || values.type === 'OVERDRAFT');
+  const selectedLabel = findCatalogLabel(context.labels, values.category);
   return (
     <form className="record-form" onSubmit={save}>
       {error && <ErrorMessage message={error} />}
@@ -238,13 +242,23 @@ export function RecordForm({
         )}
         {scheduled && (
           <>
-            <Field label="Kategori">
-              <input
-                value={values.category}
-                onChange={change('category')}
-                placeholder="Kendi kategorinizi girin"
-                maxLength={120}
-              />
+            <Field label="Etiket">
+              <select value={values.category} onChange={change('category')}>
+                <option value="">Etiket yok</option>
+                {values.category && (!selectedLabel || selectedLabel.archived) && (
+                  <option value={values.category}>
+                    {values.category}
+                    {selectedLabel?.archived ? ' (arşivlenmiş)' : ''}
+                  </option>
+                )}
+                {context.labels
+                  ?.filter((label) => !label.archived)
+                  .map((label) => (
+                    <option key={label.id} value={label.name}>
+                      {label.name}
+                    </option>
+                  ))}
+              </select>
             </Field>
             <Field label="Kişisel veya iş">
               <select value={values.scope} onChange={change('scope')}>
