@@ -183,6 +183,7 @@ export function Modal({
   const id = useId();
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
+    const previousId = previous?.id;
     const dialog = ref.current!;
     dialog.showModal();
     const close = (event: Event) => {
@@ -206,7 +207,12 @@ export function Modal({
       dialog.removeEventListener('cancel', close);
       if (dialog.open) dialog.close();
       document.body.classList.remove('dialog-open');
-      previous?.focus();
+      const restoreTarget = previous?.isConnected
+        ? previous
+        : previousId
+          ? document.getElementById(previousId)
+          : null;
+      restoreTarget?.focus({ preventScroll: true });
     };
   }, [onClose]);
   return (

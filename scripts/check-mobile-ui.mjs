@@ -572,6 +572,137 @@ async function verifyVisualViewportKeyboard(page, mobile) {
   }
 }
 
+async function verifyMobileDockViewport(page, mobile) {
+  if (!mobile) return;
+  await go(page, 'dashboard');
+  const layoutHeight = await page.evaluate(() => innerHeight);
+  const dock = async (height, offsetTop, scale = 1) => {
+    await page.evaluate(
+      ({ height, offsetTop, scale }) => {
+        Object.defineProperties(window.visualViewport, {
+          height: { configurable: true, value: height },
+          offsetTop: { configurable: true, value: offsetTop },
+          scale: { configurable: true, value: scale },
+        });
+        window.visualViewport.dispatchEvent(new Event('resize'));
+        window.visualViewport.dispatchEvent(new Event('scroll'));
+      },
+      { height, offsetTop, scale },
+    );
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+    return page.evaluate(() => {
+      const nav = document.querySelector('.mobile-bottom-nav').getBoundingClientRect();
+      const fab = document.querySelector('.quick-add-fab').getBoundingClientRect();
+      return { nav: nav.toJSON(), fab: fab.toJSON(), innerHeight };
+    });
+  };
+  try {
+    await page.evaluate(() => {
+      const input = document.createElement('input');
+      input.id = 'viewport-qa-input';
+      input.style.cssText = 'position:fixed;top:10px;left:10px;width:100px;opacity:0';
+      document.body.append(input);
+      input.focus({ preventScroll: true });
+    });
+    const keyboard = await dock(320, 100);
+    check(
+      Math.abs(keyboard.nav.bottom - 402) <= 2 &&
+        Math.abs((keyboard.fab.left + keyboard.fab.right) / 2 - page.viewportSize().width / 2) <=
+          2 &&
+        keyboard.fab.top >= keyboard.nav.top &&
+        keyboard.fab.bottom <= keyboard.nav.bottom,
+      'mobile dock follows the visible keyboard viewport independently of layout height',
+      keyboard,
+    );
+    const restored = await dock(layoutHeight - 60, 30);
+    check(
+      Math.abs(restored.nav.bottom - (layoutHeight - 48)) <= 2,
+      'mobile dock returns to the visible bottom after keyboard dismissal and toolbar changes',
+      restored,
+    );
+    check(restored.innerHeight === layoutHeight, 'dock check retains the layout viewport');
+    const focusedDismissal = await dock(layoutHeight, 100);
+    check(
+      Math.abs(focusedDismissal.nav.bottom - (layoutHeight - 18)) <= 2,
+      'keyboard dismissal clears the old pan while the input remains focused',
+      focusedDismissal,
+    );
+    await page.evaluate(() => document.getElementById('viewport-qa-input').remove());
+    const loginDismissal = await dock(Math.max(100, layoutHeight - 315), 0);
+    check(
+      Math.abs(loginDismissal.nav.bottom - (layoutHeight - 18)) <= 2,
+      'unmounting a focused login field recovers stale keyboard-height geometry',
+      loginDismissal,
+    );
+    const zoomed = await dock(layoutHeight / 2, 100, 2);
+    check(
+      Math.abs(zoomed.nav.bottom - (layoutHeight - 18)) <= 2,
+      'pinch zoom retains native fixed positioning instead of shrinking the navigation',
+      zoomed,
+    );
+  } finally {
+    await page.evaluate(() => {
+      document.getElementById('viewport-qa-input')?.remove();
+      delete window.visualViewport.height;
+      delete window.visualViewport.offsetTop;
+      delete window.visualViewport.scale;
+      window.visualViewport.dispatchEvent(new Event('resize'));
+    });
+    await page.evaluate(
+      () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+    );
+  }
+}
+
+async function verifyDockBreakpointFocus(page) {
+  const originalSize = page.viewportSize();
+  try {
+    for (const [from, to] of [
+      [
+        { width: 1024, height: 768 },
+        { width: 1024, height: 480 },
+      ],
+      [
+        { width: 1024, height: 480 },
+        { width: 1024, height: 768 },
+      ],
+    ]) {
+      await page.setViewportSize(from);
+      await go(page, 'dashboard');
+      await page.evaluate(() => scrollTo(0, 200));
+      await page.locator('.quick-add-fab').click();
+      await page.locator('dialog[open]').waitFor();
+      await page.setViewportSize(to);
+      await page.waitForFunction(
+        (mobile) => !!document.querySelector('.mobile-bottom-nav .quick-add-fab') === mobile,
+        mobileSize(to),
+      );
+      const beforeClose = await page.evaluate(() => scrollY);
+      await close(page);
+      const restored = await page.evaluate(() => ({
+        correct: document.activeElement === document.querySelector('.quick-add-fab'),
+        connected: document.activeElement?.isConnected,
+        scrollY,
+      }));
+      check(
+        restored.correct && restored.connected,
+        'closing AI entry after a dock breakpoint change focuses the replacement +',
+        { from, to, restored },
+      );
+      check(
+        restored.scrollY === beforeClose,
+        'restoring + focus after a dock breakpoint change preserves page scroll',
+        { from, to, beforeClose, restored },
+      );
+    }
+  } finally {
+    await page.setViewportSize(originalSize);
+    await go(page, 'dashboard');
+  }
+}
+
 async function simulateDisplayMode(page, initialMode) {
   await page.addInitScript((initialMode) => {
     const nativeMatchMedia = window.matchMedia.bind(window);
@@ -875,6 +1006,9 @@ try {
     }
     await step('entry', () => verifyEntry(page, mobile));
     await step('forms', () => verifyForms(page, mobile));
+    if (!baseline) await step('mobile-dock-viewport', () => verifyMobileDockViewport(page, mobile));
+    if (!baseline && size.width === 390 && size.height === 844)
+      await step('dock-breakpoint-focus', () => verifyDockBreakpointFocus(page));
     if (mobile && !baseline)
       await step('drawer', async () => {
         await go(page, 'dashboard');
@@ -946,13 +1080,18 @@ try {
           };
         });
         check(
-          safe.paddingTop >= 28 && safe.navPaddingBottom >= 24,
+          safe.paddingTop >= 28 &&
+            safe.nav.bottom <= size.height - 18 - 24 + 1 &&
+            safe.nav.left >= 18 + 18 - 1 &&
+            safe.nav.right <= size.width - 18 - 18 + 1,
           'header and bottom navigation reserve simulated safe areas',
           safe,
         );
         check(
-          safe.fab.right <= size.width - 18 + 1 && safe.fab.bottom <= safe.nav.top + 1,
-          'AI + clears the cutout and bottom navigation',
+          Math.abs((safe.fab.left + safe.fab.right) / 2 - size.width / 2) <= 2 &&
+            safe.fab.top >= safe.nav.top &&
+            safe.fab.bottom <= safe.nav.bottom,
+          'AI + stays centered inside the floating dock and clears simulated cutouts',
           safe,
         );
         await page.locator('.quick-add-fab').click();

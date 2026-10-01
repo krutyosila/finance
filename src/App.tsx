@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowRight,
@@ -38,6 +38,7 @@ import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { useAuth } from './auth';
 import { InstallPanel, OfflineBanner, usePwa } from './pwa';
+import { useMobileViewport } from './viewport';
 
 const navigation = [
   { title: 'Genel bakış', icon: LayoutDashboard, path: 'dashboard' },
@@ -89,6 +90,7 @@ export function App() {
   const [page, setPage] = useState(currentPage);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobile, setMobile] = useState(() => window.matchMedia(mobileLayout).matches);
+  useMobileViewport(mobile);
   const [revision, setRevision] = useState(0);
   const [mode, setMode] = useState<Mode>(null);
   const [toast, setToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -250,6 +252,21 @@ export function App() {
   };
   const title =
     mode?.kind === 'record' ? (mode.record ? editLabels : recordLabels)[mode.collection] : '';
+  const quickAddButton = (
+    <button
+      id="quick-entry-trigger"
+      type="button"
+      className="quick-add-fab"
+      aria-label="Yapay zekâ ile kayıt ekle"
+      aria-haspopup="dialog"
+      title="Yapay zekâ ile kayıt ekle (⌘ / Ctrl K)"
+      disabled={!context || !online || reviewBusy}
+      onClick={openQuickEntry}
+      inert={mobileOpen}
+    >
+      <Plus size={28} strokeWidth={1.8} aria-hidden="true" />
+    </button>
+  );
   return (
     <div className="app-shell">
       <a
@@ -472,30 +489,22 @@ export function App() {
         </main>
       </div>
       <nav className="mobile-bottom-nav" aria-label="Hızlı gezinme" inert={mobileOpen}>
-        {mobileNavigation.map((item) => (
-          <a
-            key={item.path}
-            href={`#/${item.path}`}
-            aria-current={page === item.title ? 'page' : undefined}
-            className={page === item.title ? 'active' : ''}
-          >
-            <item.icon size={21} strokeWidth={1.7} aria-hidden="true" />
-            <span>{item.title}</span>
-          </a>
+        {mobileNavigation.map((item, index) => (
+          <Fragment key={item.path}>
+            {index === 2 && mobile && quickAddButton}
+            <a
+              href={`#/${item.path}`}
+              aria-label={item.title}
+              aria-current={page === item.title ? 'page' : undefined}
+              className={page === item.title ? 'active' : ''}
+            >
+              <item.icon size={22} strokeWidth={1.7} aria-hidden="true" />
+              <span className="sr-only">{item.title}</span>
+            </a>
+          </Fragment>
         ))}
       </nav>
-      <button
-        type="button"
-        className="quick-add-fab"
-        aria-label="Yapay zekâ ile kayıt ekle"
-        aria-haspopup="dialog"
-        title="Yapay zekâ ile kayıt ekle (⌘ / Ctrl K)"
-        disabled={!context || !online || reviewBusy}
-        onClick={openQuickEntry}
-        inert={mobileOpen}
-      >
-        <Plus size={28} strokeWidth={1.8} aria-hidden="true" />
-      </button>
+      {!mobile && quickAddButton}
       {context && mode?.kind === 'quick' && (
         <Modal
           title="Bir not ekleyin"
