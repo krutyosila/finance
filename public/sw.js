@@ -1,11 +1,18 @@
-const CACHE_NAME = 'still-static-v2';
+const CACHE_NAME = 'kasa-static-v1';
 const PUBLIC_FILES = new Set([
   '/offline.html',
   '/manifest.webmanifest',
+  '/brand/kasa-mark.svg',
+  '/brand/kasa-mark-mint.svg',
+  '/brand/kasa-logo.svg',
+  '/brand/kasa-logo-light.svg',
+  '/favicon.ico',
+  '/icons/favicon-32.png',
   '/icons/icon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/maskable-512.png',
+  '/icons/maskable-icon.svg',
   '/icons/apple-touch-icon.png',
 ]);
 
@@ -20,7 +27,11 @@ self.addEventListener('activate', (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key.startsWith('still-static-') && key !== CACHE_NAME)
+            .filter(
+              (key) =>
+                (key.startsWith('still-static-') || key.startsWith('kasa-static-')) &&
+                key !== CACHE_NAME,
+            )
             .map((key) => caches.delete(key)),
         ),
       )

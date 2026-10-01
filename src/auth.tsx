@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, Waves, WifiOff } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, WifiOff } from 'lucide-react';
 import { api } from './api';
 import {
   AUTH_REQUIRED_EVENT,
@@ -17,6 +17,7 @@ import {
   type AuthSession,
 } from './security';
 import { InstallPanel, usePwa } from './pwa';
+import { Brand } from './components/Brand';
 import { Button, ErrorMessage, Field, IconButton, Loading } from './components/ui';
 
 interface AuthState {
@@ -169,7 +170,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   if (checking)
     return (
       <div className="auth-checking">
-        <img src="/icons/icon.svg" alt="Still" />
+        <img src="/icons/icon.svg" alt="Kasa" width={62} height={62} />
         <Loading text="Oturumunuz doğrulanıyor…" />
       </div>
     );
@@ -204,7 +205,7 @@ function AuthConnection({ error, retry }: { error: string; retry: () => void }) 
   const { online } = usePwa();
   return (
     <div className="auth-connection">
-      <img src="/icons/icon.svg" alt="Still" />
+      <img src="/icons/icon.svg" alt="Kasa" width={62} height={62} />
       <WifiOff size={27} />
       <h1>Bağlantı gerekli.</h1>
       <p>
@@ -257,19 +258,13 @@ function LoginGate({
     <main className="auth-page">
       <section className="auth-story">
         <div className="brand">
-          <span className="brand-mark">
-            <Waves size={29} strokeWidth={1.7} />
-          </span>
-          <span>
-            still<span className="brand-dot">.</span>
-          </span>
+          <Brand light />
         </div>
         <div className="auth-story-copy">
           <span className="eyebrow">FİNANSINIZA KİŞİSEL BİR ALAN</span>
           <h1>
             Biraz sakinlik.
-            <br />
-            Daha net bir bakış.
+            <br /> Daha net bir bakış.
           </h1>
           <p>
             Geliriniz, harcamalarınız ve borçlarınız.

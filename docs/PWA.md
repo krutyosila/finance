@@ -1,6 +1,6 @@
-# Still uygulamasını kurma
+# Kasa uygulamasını kurma
 
-Still aynı web arayüzünü telefon ve bilgisayarda kurulabilir uygulama olarak açar. Kurulum, ayrı bir finansal veritabanı veya çevrimdışı defter oluşturmaz. Web sürümünde veriler sunucuda; yerel sürümde veriler yerel hizmetin SQLite dosyasındadır.
+Kasa aynı web arayüzünü telefon ve bilgisayarda kurulabilir uygulama olarak açar. Kurulum, ayrı bir finansal veritabanı veya çevrimdışı defter oluşturmaz. Web sürümünde veriler sunucuda; yerel sürümde veriler yerel hizmetin SQLite dosyasındadır.
 
 ## Kurulum
 
@@ -24,9 +24,9 @@ Finansal bir API isteği `401` döndürürse yanıt gövdesi beklenmeden giriş 
 
 ## Çevrimdışı sınırları ve önbellek
 
-Service worker yalnızca üretim derlemesinde kaydedilir. Önbellek izin listesi `/assets/` altındaki uygulama dosyaları, manifest, simgeler ve `offline.html` ile sınırlıdır. Tüm `/api` istekleri ve GET dışındaki istekler service worker önbelleğini atlar. Başka bir adrese yönlendirilen dosya yanıtları da önbelleğe alınmaz. API istekleri tarayıcı HTTP önbelleği için de `cache: no-store` kullanır.
+Service worker yalnızca üretim derlemesinde kaydedilir. Önbellek izin listesi `/assets/` altındaki uygulama dosyaları, manifest, Kasa logoları, favicon, simgeler ve `offline.html` ile sınırlıdır. Tüm `/api` istekleri ve GET dışındaki istekler service worker önbelleğini atlar. Başka bir adrese yönlendirilen dosya yanıtları da önbelleğe alınmaz. API istekleri tarayıcı HTTP önbelleği için de `cache: no-store` kullanır.
 
-Manifest veya çevrimdışı ekran değiştiğinde statik önbelleğin sürümü de yenilenir. Yeni sürüm açık uygulama ve sekmeler kapandıktan sonra devreye girer; telefonda eski görünüm kalırsa uygulamayı ve siteyi açık tutan sekmeleri kapatıp yeniden açın. Tam ekran ve bağımsız pencere kurulumları uygulama içinde kurulu olarak tanınır.
+Manifest veya çevrimdışı ekran değiştiğinde statik önbelleğin sürümü de yenilenir. Kasa güncellemesi eski Still statik önbelleklerini ve önceki Kasa sürümlerinin statik önbelleklerini kaldırır; diğer uygulamaların önbelleklerine dokunmaz. Yeni sürüm açık uygulama ve sekmeler kapandıktan sonra devreye girer; telefonda eski görünüm kalırsa uygulamayı ve siteyi açık tutan sekmeleri kapatıp yeniden açın. Tam ekran ve bağımsız pencere kurulumları uygulama içinde kurulu olarak tanınır.
 
 Finansal API yanıtları, giriş bilgileri ve dışa aktarılan kayıtlar Cache Storage, localStorage, sessionStorage veya IndexedDB’ye yazılmaz. Açılış sayfası ağdan istenir; çevrimdışıyken yalnızca bağlantı gerektiğini anlatan statik ekran gösterilir. Açık bir oturumdaki görüntülenen veriler yalnızca bellektedir; kalıcı çevrimdışı erişim sağlanmaz.
 

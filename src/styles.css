@@ -147,23 +147,18 @@ svg {
 .brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-shrink: 0;
+  min-height: 48px;
   color: white;
-  font-size: 35px;
-  font-weight: 700;
-  letter-spacing: -2px;
   margin: 0 14px 50px;
   width: fit-content;
+  border-radius: 4px;
 }
-.brand-mark {
-  width: 34px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  color: #9ecac6;
-}
-.brand-dot {
-  color: #87beb7;
+.brand-logo {
+  display: block;
+  width: 152px;
+  height: auto;
+  max-width: 100%;
 }
 .sidebar-caption {
   font-size: 11px;
@@ -2752,7 +2747,9 @@ table {
 }
 .auth-story .brand {
   margin: 0;
-  font-size: 38px;
+}
+.auth-story .brand-logo {
+  width: 176px;
 }
 .auth-story-copy {
   margin: auto 0;
@@ -3051,7 +3048,10 @@ table {
     padding: calc(22px + var(--safe-top)) 25px 23px;
   }
   .auth-story .brand {
-    font-size: 32px;
+    min-height: 44px;
+  }
+  .auth-story .brand-logo {
+    width: 152px;
   }
   .auth-story-copy {
     padding: 24px 0 2px;

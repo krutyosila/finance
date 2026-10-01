@@ -19,12 +19,12 @@ import {
   ShieldCheck,
   Settings2,
   Wallet,
-  Waves,
   X,
 } from 'lucide-react';
 import type { FinancialContext, AiPlan, Transaction, TransactionInput } from '../shared/types';
 import { api, useResource } from './api';
 import { AiPlanReview } from './components/AiPlanReview';
+import { Brand } from './components/Brand';
 import { QuickEntry } from './components/QuickEntry';
 import { RecordForm } from './components/RecordForms';
 import { TransactionForm } from './components/TransactionForm';
@@ -282,14 +282,9 @@ export function App() {
             className="brand"
             href="#/dashboard"
             onClick={() => setMobileOpen(false)}
-            aria-label="Still ana sayfa"
+            aria-label="Kasa ana sayfa"
           >
-            <span className="brand-mark">
-              <Waves size={26} strokeWidth={1.7} />
-            </span>
-            <span>
-              still<span className="brand-dot">.</span>
-            </span>
+            <Brand light decorative />
           </a>
           <IconButton
             label="Menüyü kapat"
@@ -333,7 +328,9 @@ export function App() {
               setMode({ kind: 'workspace' });
             }}
           >
-            <span className="workspace-avatar">S</span>
+            <span className="workspace-avatar">
+              <img src="/brand/kasa-mark-mint.svg" alt="" width={24} height={24} />
+            </span>
             <span>
               <strong>Kişisel alanım</strong>
               <small>

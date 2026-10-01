@@ -1,4 +1,4 @@
-# Still Finance
+# Kasa
 
 Yerelde veya kendi HTTPS sunucunuzda çalışan kişisel finans uygulaması. Web arayüzü, REST API ve komut satırı aynı SQLite muhasebe servisini kullanır. Yerelde elle kayıt ve rapor için internet gerekmez; sunucu kullanımında telefon/bilgisayar aynı sunucu defterine bağlanır. AI hızlı giriş OpenAI API anahtarı ve internet gerektirir; API kullanımı OpenAI hesabınıza ücret yansıtabilir. İnternetten kur alınmaz. Başlangıçta örnek finans kaydı oluşturulmaz.
 

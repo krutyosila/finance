@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { Check, Download, MonitorSmartphone, Share2, WifiOff } from 'lucide-react';
+import { Download, Share2, WifiOff } from 'lucide-react';
 import { Button } from './components/ui';
 
 interface InstallPrompt extends Event {
@@ -83,17 +83,15 @@ export function InstallPanel({ compact = false }: { compact?: boolean }) {
   return (
     <section
       className={`install-panel ${compact ? 'install-panel-compact' : ''}`}
-      aria-label="Uygulama kurulumu"
+      aria-label="Kasa uygulama kurulumu"
     >
-      <span className="install-icon">
-        {installed ? <Check size={20} /> : <MonitorSmartphone size={20} />}
-      </span>
+      <img className="install-icon" src="/icons/icon.svg" alt="" width={34} height={34} />
       <div>
-        <h3>{installed ? 'Still uygulaması kurulu' : 'Her ekranda aynı alan'}</h3>
+        <h3>{installed ? 'Kasa uygulaması kurulu' : 'Kasa her ekranda yanınızda'}</h3>
         <p>
           {installed
             ? 'Finansal alanınızı ana ekranınızdan veya masaüstünüzden açabilirsiniz.'
-            : 'Still’i telefonunuza veya bilgisayarınıza uygulama olarak ekleyebilirsiniz.'}
+            : 'Kasa’yı telefonunuza veya bilgisayarınıza uygulama olarak ekleyebilirsiniz.'}
         </p>
         {!installed && canInstall ? (
           <Button
@@ -112,7 +110,7 @@ export function InstallPanel({ compact = false }: { compact?: boolean }) {
             }}
           >
             <Download size={16} />
-            {busy ? 'Kurulum açılıyor…' : 'Uygulamayı yükle'}
+            {busy ? 'Kurulum açılıyor…' : 'Kasa’yı yükle'}
           </Button>
         ) : (
           !installed && (

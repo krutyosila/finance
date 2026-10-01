@@ -630,13 +630,13 @@ async function verifyFullscreenInstall(browser, size, mobile) {
       const panel = page.locator('dialog[open] .install-panel');
       await panel.waitFor();
       const installed = panel.getByRole('heading', {
-        name: 'Still uygulaması kurulu',
+        name: 'Kasa uygulaması kurulu',
         exact: true,
       });
       if (initialMode === 'browser') {
         check(
           await panel
-            .getByRole('heading', { name: 'Her ekranda aynı alan', exact: true })
+            .getByRole('heading', { name: 'Kasa her ekranda yanınızda', exact: true })
             .isVisible(),
           'browser mode initially offers installation guidance',
           await panel.innerText(),
