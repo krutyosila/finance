@@ -237,7 +237,7 @@ export function App() {
               onClick={() => setMobileOpen(false)}
             >
               <item.icon size={19} strokeWidth={1.65} />
-              <span>{item.title}</span>
+              <span className="nav-label">{item.title}</span>
               {page === item.title && <span className="nav-current" />}
             </a>
           ))}
