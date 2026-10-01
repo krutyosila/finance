@@ -32,6 +32,7 @@ const baseline = process.argv.includes('--baseline');
 const focusTheme = process.env.MOBILE_QA_FOCUS === 'theme';
 const focusLabels = process.env.MOBILE_QA_FOCUS === 'labels';
 const focusRefresh = process.env.MOBILE_QA_FOCUS === 'refresh';
+const focusModals = process.env.MOBILE_QA_FOCUS === 'modals';
 const skipThemeWorkflow = process.env.MOBILE_QA_SKIP_THEME_WORKFLOW === '1';
 const initialColorScheme = process.env.MOBILE_QA_THEME === 'dark' ? 'dark' : 'light';
 const stamp = '2026-10-01T12:00:00.000Z';
@@ -302,6 +303,7 @@ const refreshFailurePaths = new Set();
 let mockAiSettings = { provider: 'openai', configured: true, model: 'gpt-5.4-mini' };
 
 function resetLabelFixtures() {
+  fixture.currentCycle = cycle;
   labelCatalog.splice(0, labelCatalog.length, ...structuredClone(initialLabels));
   transactions.splice(0, transactions.length, ...structuredClone(initialTransactions));
   scanShouldFail = false;
@@ -919,6 +921,196 @@ async function verifyForms(page, mobile) {
   await close(page);
   await page.getByRole('button', { name: 'İşlemi sil', exact: true }).first().click();
   await modalFits(page, 'delete confirmation', mobile);
+  await close(page);
+}
+
+async function checkModalContent(page, name, { keyboard = false, wrapped = false } = {}) {
+  const dialog = page.locator('dialog[open]');
+  await dialog.waitFor();
+  const header = dialog.locator('.modal-header');
+  const originalHeader = await header.boundingBox();
+  if (wrapped)
+    check(
+      originalHeader.height > 120,
+      `${name}: wrapped header exceeds the former fixed 120px scroll allowance`,
+      originalHeader,
+    );
+  const controls = dialog.locator(
+    'input:not([type="hidden"]):not(:disabled), select:not(:disabled), textarea:not(:disabled)',
+  );
+  const count = await controls.count();
+  const indexes = [...new Set([0, Math.floor(count / 2), count - 1])].filter(
+    (index) => index >= 0 && index < count,
+  );
+  for (const index of indexes) {
+    const control = controls.nth(index);
+    if (!(await control.isVisible())) continue;
+    await control.evaluate((element) => {
+      const field = element.closest('.field') || element;
+      field.scrollIntoView({ block: 'start', behavior: 'instant' });
+      element.focus({ preventScroll: true });
+    });
+    await refreshFrames(page);
+    const geometry = await control.evaluate((element) => {
+      const modal = element.closest('dialog');
+      const body = modal.querySelector('.modal-body') || modal;
+      const field = element.closest('.field') || element;
+      const label = field.querySelector(':scope > span') || field;
+      const rect = (node) => node.getBoundingClientRect().toJSON();
+      return {
+        header: rect(modal.querySelector('.modal-header')),
+        field: rect(field),
+        label: rect(label),
+        control: rect(element),
+        body: rect(body),
+        bodyScroll: body.scrollTop,
+        focused: document.activeElement === element,
+      };
+    });
+    check(
+      geometry.focused &&
+        geometry.label.top >= geometry.header.bottom - 1 &&
+        geometry.control.top >= geometry.header.bottom - 1,
+      `${name}: focused field ${index + 1} label and control remain below the modal header`,
+      geometry,
+    );
+    check(
+      geometry.control.bottom <= geometry.body.bottom + 1 &&
+        geometry.control.top >= geometry.body.top - 1,
+      `${name}: focused field ${index + 1} remains inside the visible scroll area`,
+      geometry,
+    );
+  }
+  await dialog.evaluate((element) => {
+    const body = element.querySelector('.modal-body') || element;
+    body.scrollTop = body.scrollHeight;
+  });
+  await refreshFrames(page);
+  const scrolledHeader = await header.boundingBox();
+  check(
+    Math.abs(scrolledHeader.y - originalHeader.y) <= 1,
+    `${name}: scrolling form content keeps the header in place`,
+    { originalHeader, scrolledHeader },
+  );
+  if (keyboard) {
+    const bounds = await dialog.boundingBox();
+    check(
+      bounds.y >= 99 && bounds.y + bounds.height <= 421,
+      `${name}: dialog stays in keyboard viewport 320px high at top100px`,
+      bounds,
+    );
+  }
+  await screenshot(page, `modal-${name.replace(/[^a-z0-9-]/gi, '-')}`);
+}
+
+async function verifyModalsWorkflow(page, mobile) {
+  await go(page, 'dashboard');
+  await page.locator('.quick-add-fab').click();
+  currentScreen = 'modals-ai-input';
+  await checkModalContent(page, 'AI input');
+  await page.locator('.quick-input-row textarea').fill('QA_MODALS');
+  await page.getByRole('button', { name: 'Yapay zekâ ile kayıtları önizle', exact: true }).click();
+  await page.locator('.ai-plan-review').waitFor();
+  currentScreen = 'modals-ai-review';
+  await checkModalContent(page, 'AI review');
+  await close(page);
+  await go(page, 'transactions');
+  await page.getByRole('button', { name: 'İşlem ekle', exact: true }).click();
+  await selectField(page, 'İşlem türü').selectOption('EXPENSE');
+  await checkModalContent(page, 'transaction create');
+  await page.locator('.advanced-toggle').click();
+  await checkModalContent(page, 'transaction advanced');
+  await close(page);
+  await page.locator('.table-description').first().click();
+  await checkModalContent(page, 'transaction edit');
+  await close(page);
+  for (const [path, label] of [
+    ['accounts', 'Hesap ekle'],
+    ['debts', 'Borç ekle'],
+    ['recurring', 'Düzenli ödeme ekle'],
+    ['subscriptions', 'Abonelik ekle'],
+  ]) {
+    await go(page, path);
+    currentScreen = `modals-${path}`;
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await checkModalContent(page, `${path} create`);
+    if (path === 'accounts' || path === 'debts') {
+      await selectField(page, 'Tür').selectOption('CREDIT_CARD');
+      await checkModalContent(page, `${path} credit card`);
+    }
+    if (path === 'accounts') {
+      await page.locator('dialog[open] .modal-header h2').evaluate((element) => {
+        element.textContent = 'Bu kaydın ayrıntılarını düzenleyin ve kontrol edin';
+      });
+      await page.locator('dialog[open] .modal-header p').evaluate((element) => {
+        element.textContent = 'Değişiklikleri kaydetmeden önce adını ve hesabını kontrol edin.';
+      });
+      const tallHeader = page.viewportSize().width <= 430;
+      await checkModalContent(page, 'wrapped account header', { wrapped: tallHeader });
+      await page.evaluate(() => {
+        Object.defineProperties(window.visualViewport, {
+          height: { configurable: true, value: 320 },
+          offsetTop: { configurable: true, value: 100 },
+        });
+        window.visualViewport.dispatchEvent(new Event('resize'));
+      });
+      await refreshFrames(page);
+      try {
+        await checkModalContent(page, 'wrapped account keyboard', {
+          wrapped: tallHeader,
+          keyboard: true,
+        });
+      } finally {
+        await page.evaluate(() => {
+          delete window.visualViewport.height;
+          delete window.visualViewport.offsetTop;
+          window.visualViewport.dispatchEvent(new Event('resize'));
+        });
+      }
+    }
+    await close(page);
+  }
+  await go(page, 'reports');
+  currentScreen = 'modals-cycle';
+  await page.getByRole('button', { name: 'Aktif dönemi bitir', exact: true }).click();
+  await checkModalContent(page, 'cycle close');
+  await close(page);
+  fixture.currentCycle = null;
+  await page.reload();
+  await go(page, 'reports');
+  await page.getByRole('button', { name: 'Dönem başlat', exact: true }).click();
+  await checkModalContent(page, 'cycle create');
+  await close(page);
+  fixture.currentCycle = cycle;
+  await page.reload();
+  await go(page, 'transactions');
+  currentScreen = 'modals-history';
+  await page.getByRole('button', { name: 'İşlem geçmişini gör', exact: true }).first().click();
+  await page.locator('.history-timeline').waitFor();
+  await checkModalContent(page, 'history');
+  await close(page);
+  await page.getByRole('button', { name: 'İşlemi sil', exact: true }).first().click();
+  await checkModalContent(page, 'delete');
+  await close(page);
+  await go(page, 'settings');
+  currentScreen = 'modals-labels';
+  await page.getByRole('button', { name: 'Etiket ekle', exact: true }).click();
+  await checkModalContent(page, 'label create');
+  await close(page);
+  await page.getByRole('button', { name: 'Market etiketini düzenle', exact: true }).click();
+  await checkModalContent(page, 'label edit');
+  await close(page);
+  await page.getByRole('button', { name: 'Market etiketini arşivle', exact: true }).click();
+  await checkModalContent(page, 'label archive');
+  await close(page);
+  await page.getByRole('button', { name: 'Tümünü tara', exact: true }).click();
+  await page.locator('.label-scan-list').waitFor();
+  await checkModalContent(page, 'label scan review');
+  await close(page);
+  currentScreen = 'modals-workspace';
+  if (mobile) await page.getByRole('button', { name: 'Menüyü aç', exact: true }).click();
+  await page.locator('.workspace-button').click();
+  await checkModalContent(page, 'workspace');
   await close(page);
 }
 
@@ -2219,6 +2411,14 @@ try {
       await context.close();
       continue;
     }
+    if (focusModals) {
+      await step('modals', () => verifyModalsWorkflow(page, mobile));
+      console.log(
+        `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
+      );
+      await context.close();
+      continue;
+    }
     for (const path of pages) {
       await step(path, async () => {
         await go(page, path);
@@ -2394,7 +2594,8 @@ try {
           padding,
         );
         await page.locator('dialog[open]').evaluate((el) => {
-          el.scrollTop = el.scrollHeight;
+          const body = el.querySelector('.modal-body') || el;
+          body.scrollTop = body.scrollHeight;
         });
         const header = await page.locator('dialog[open] .modal-header').boundingBox();
         check(header.y >= 28 - 1, 'scrolled modal header stays below simulated top cutout', header);

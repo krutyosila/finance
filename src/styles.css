@@ -1747,6 +1747,19 @@ table {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+.modal[open] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-padding-block: 12px;
+}
 .modal-wide {
   width: 720px;
 }
@@ -1761,8 +1774,8 @@ table {
   overflow: hidden;
 }
 .modal-header {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex: none;
   background: var(--surface);
   z-index: 2;
   display: flex;
@@ -1862,7 +1875,7 @@ table {
   background: #fafcfd;
   border-radius: 0 0 16px 16px;
 }
-.modal > .form-footer {
+.modal-body > .form-footer {
   margin: 0;
 }
 .advanced-toggle {
@@ -3813,21 +3826,10 @@ table {
     border-radius: 0;
     padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
     background: var(--surface);
-    scroll-padding-block: 120px 24px;
   }
   .modal-header {
-    top: var(--safe-top);
     gap: 12px;
     padding: 22px 20px;
-  }
-  .modal-header::before {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: calc(-1 * var(--safe-top));
-    height: var(--safe-top);
-    background: var(--surface);
   }
   .modal-header > .icon-button {
     margin-right: 0;

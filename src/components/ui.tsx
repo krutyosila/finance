@@ -185,7 +185,6 @@ export function Modal({
     const previous = document.activeElement as HTMLElement | null;
     const previousId = previous?.id;
     const dialog = ref.current!;
-    dialog.showModal();
     const close = (event: Event) => {
       event.preventDefault();
       onClose();
@@ -199,6 +198,10 @@ export function Modal({
       dialog.style.setProperty('--dialog-viewport-top', `${viewport.offsetTop}px`);
     };
     resize();
+    dialog.showModal();
+    dialog.scrollTop = 0;
+    const body = dialog.querySelector<HTMLElement>('.modal-body');
+    if (body) body.scrollTop = 0;
     viewport?.addEventListener('resize', resize);
     viewport?.addEventListener('scroll', resize);
     return () => {
@@ -242,7 +245,7 @@ export function Modal({
           <X size={20} />
         </IconButton>
       </div>
-      {children}
+      <div className="modal-body">{children}</div>
     </dialog>
   );
 }
