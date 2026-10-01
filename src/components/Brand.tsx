@@ -1,15 +1,28 @@
+import { useTheme } from '../theme';
+
 interface BrandProps {
   light?: boolean;
   decorative?: boolean;
+  mark?: boolean;
 }
 
-export function Brand({ light = false, decorative = false }: BrandProps) {
+export function Brand({ light, decorative = false, mark = false }: BrandProps) {
+  const { resolved } = useTheme();
+  const lightLogo = light ?? resolved === 'dark';
   return (
     <img
-      className="brand-logo"
-      src={light ? '/brand/kasa-logo-light.svg' : '/brand/kasa-logo.svg'}
+      className={`brand-logo${mark ? ' brand-mark' : ''}`}
+      src={
+        mark
+          ? lightLogo
+            ? '/brand/kasa-mark-mint.svg'
+            : '/brand/kasa-mark.svg'
+          : lightLogo
+            ? '/brand/kasa-logo-light.svg'
+            : '/brand/kasa-logo.svg'
+      }
       alt={decorative ? '' : 'Kasa'}
-      width={192}
+      width={mark ? 60 : 192}
       height={60}
       draggable={false}
     />

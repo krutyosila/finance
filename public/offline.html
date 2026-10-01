@@ -3,9 +3,41 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-    <meta name="theme-color" content="#122331" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="color-scheme" content="light dark" />
+    <script src="/theme-bootstrap-v1.js"></script>
     <title>Bağlantı gerekli — Kasa</title>
     <style>
+      :root {
+        color-scheme: light;
+        --canvas: #f5f7f9;
+        --surface: #fff;
+        --text: #223441;
+        --muted: #667b88;
+        --line: #e7ecef;
+        --focus: #5888ba;
+        background: var(--canvas);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme='light']) {
+          color-scheme: dark;
+          --canvas: #0e1920;
+          --surface: #14232c;
+          --text: #dce8ee;
+          --muted: #a9bac5;
+          --line: #314652;
+          --focus: #93b7e6;
+        }
+      }
+      :root[data-theme='dark'] {
+        color-scheme: dark;
+        --canvas: #0e1920;
+        --surface: #14232c;
+        --text: #dce8ee;
+        --muted: #a9bac5;
+        --line: #314652;
+        --focus: #93b7e6;
+      }
       * {
         box-sizing: border-box;
       }
@@ -17,16 +49,16 @@
         padding: calc(24px + env(safe-area-inset-top, 0px))
           calc(24px + env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px))
           calc(24px + env(safe-area-inset-left, 0px));
-        background: #f5f7f9;
-        color: #223441;
+        background: var(--canvas);
+        color: var(--text);
         font-family: system-ui, sans-serif;
       }
       main {
         max-width: 420px;
         width: 100%;
         padding: clamp(20px, 6vw, 38px);
-        background: white;
-        border: 1px solid #e7ecef;
+        background: var(--surface);
+        border: 1px solid var(--line);
         border-radius: 18px;
         overflow-wrap: anywhere;
       }
@@ -44,7 +76,7 @@
       p {
         font-size: 14px;
         line-height: 1.8;
-        color: #667b88;
+        color: var(--muted);
         margin: 0 0 24px;
       }
       .retry {
@@ -60,7 +92,7 @@
         text-decoration: none;
       }
       .retry:focus-visible {
-        outline: 3px solid #5888ba;
+        outline: 3px solid var(--focus);
         outline-offset: 4px;
       }
       small {
@@ -68,7 +100,7 @@
         margin-top: 22px;
         font-size: 12px;
         line-height: 1.7;
-        color: #667b88;
+        color: var(--muted);
       }
     </style>
   </head>

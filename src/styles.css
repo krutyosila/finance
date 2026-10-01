@@ -2,18 +2,42 @@
 
 :root {
   font-family: 'DM Sans', sans-serif;
-  color: #223441;
-  background: #f5f7f9;
+  color: var(--text);
+  background: var(--surface);
+  color-scheme: light;
   font-synthesis: none;
   --ink: #122331;
   --text: #223441;
-  --muted: #77848e;
+  --muted: #627581;
   --line: #e7ecef;
+  --control-line: #b6c4cd;
   --teal: #277e78;
   --blue: #5888ba;
   --surface: #fff;
   --canvas: #f5f7f9;
   --danger: #b45050;
+  --accent-solid: #277e78;
+  --on-accent: #fff;
+  --text-strong: #344d5b;
+  --surface-soft: #f8fafb;
+  --hover: #eff4f6;
+  --teal-soft: #eff7f4;
+  --teal-line: #dce9e6;
+  --success-text: #447c6b;
+  --blue-soft: #edf2f7;
+  --purple-soft: #f0f0f7;
+  --purple-text: #666c88;
+  --warning-soft: #faf8ef;
+  --warning-text: #7b6d4d;
+  --warning-line: #e7e3d1;
+  --danger-soft: #fcf4f1;
+  --danger-line: #f0dcd5;
+  --shadow-color: #12233118;
+  --chart-3: #91b6b3;
+  --chart-4: #aebbd5;
+  --chart-5: #d4aa7b;
+  --chart-6: #c28585;
+  --chart-7: #718494;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -22,11 +46,53 @@
   --mobile-nav-height: 72px;
   --fab-size: 56px;
 }
+/* A neutral canvas also follows the system while the early theme script loads. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: #0e1920;
+    --surface: #14232c;
+    --text: #dce8ee;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --text: #dce8ee;
+  --text-strong: #e7f0f4;
+  --muted: #a9bac5;
+  --line: #314652;
+  --control-line: #536c7b;
+  --teal: #70c6bb;
+  --blue: #93b7e6;
+  --surface: #14232c;
+  --surface-soft: #192b35;
+  --canvas: #0e1920;
+  --hover: #203641;
+  --danger: #efa59a;
+  --teal-soft: #183831;
+  --teal-line: #31534a;
+  --success-text: #9bd5bd;
+  --blue-soft: #1d3044;
+  --purple-soft: #302e43;
+  --purple-text: #c8bfdf;
+  --warning-soft: #393323;
+  --warning-text: #dfc58f;
+  --warning-line: #61543a;
+  --danger-soft: #3a2929;
+  --danger-line: #65433e;
+  --shadow-color: #00000045;
+  --chart-3: #ddc29d;
+  --chart-4: #a8b3d0;
+  --chart-5: #a6d7c1;
+  --chart-6: #c5aedc;
+  --chart-7: #dda89e;
+}
 * {
   box-sizing: border-box;
 }
 body {
   margin: 0;
+  background: var(--canvas);
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -286,7 +352,7 @@ svg {
   align-items: center;
   justify-content: space-between;
   padding: 0 42px;
-  background: #ffffffcf;
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
   gap: 14px;
 }
@@ -348,7 +414,7 @@ svg {
 }
 .button-primary {
   color: white;
-  background: var(--teal);
+  background: var(--accent-solid);
   box-shadow: 0 3px 6px #277e7810;
 }
 .button-primary:hover:enabled {
@@ -372,7 +438,7 @@ svg {
 }
 .button-danger {
   color: white;
-  background: var(--danger);
+  background: #b45050;
 }
 .button-danger:hover:enabled {
   background: #994141;
@@ -3400,8 +3466,8 @@ table {
   padding: 0;
   border: 1px solid #ffffff30;
   border-radius: 50%;
-  background: var(--teal);
-  color: var(--surface);
+  background: var(--accent-solid);
+  color: var(--on-accent);
   box-shadow: 0 6px 20px #12233126;
   transition:
     background 0.16s,
@@ -3618,18 +3684,19 @@ table {
     z-index: 25;
     height: calc(64px + var(--safe-top));
     gap: 8px;
-    background: linear-gradient(
-      to bottom,
-      var(--ink) 0 var(--safe-top),
-      var(--surface) var(--safe-top) 100%
-    );
+    background: var(--surface);
   }
   .sidebar {
-    width: min(calc(260px + var(--safe-left)), calc(100% - 24px));
+    inset: 0 0 0 auto;
+    width: min(calc(280px + var(--safe-right)), calc(100% - 24px));
+    padding-left: 17px;
+    padding-right: calc(17px + var(--safe-right));
+    transform: translateX(100%);
     visibility: hidden;
   }
   .sidebar-open {
     visibility: visible;
+    transform: translateX(0);
   }
   .sidebar-heading .brand {
     margin-bottom: 32px;
@@ -3745,11 +3812,7 @@ table {
     border: 0;
     border-radius: 0;
     padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
-    background: linear-gradient(
-      to bottom,
-      var(--ink) 0 var(--safe-top),
-      var(--surface) var(--safe-top) 100%
-    );
+    background: var(--surface);
     scroll-padding-block: 120px 24px;
   }
   .modal-header {
@@ -3764,7 +3827,7 @@ table {
     right: 0;
     top: calc(-1 * var(--safe-top));
     height: var(--safe-top);
-    background: var(--ink);
+    background: var(--surface);
   }
   .modal-header > .icon-button {
     margin-right: 0;
@@ -3959,5 +4022,565 @@ table {
 @media (max-width: 420px) {
   .filter-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Semantic dark colors for the established light component styles. */
+:root[data-theme='dark'] ::selection,
+:root[data-theme='dark'] .local-status i,
+:root[data-theme='dark'] .metric-teal,
+:root[data-theme='dark'] .empty-icon,
+:root[data-theme='dark'] .empty-compact .empty-icon,
+:root[data-theme='dark'] .tag,
+:root[data-theme='dark'] .filter-grid,
+:root[data-theme='dark'] .transaction-table th,
+:root[data-theme='dark'] .record-icon,
+:root[data-theme='dark'] .record-icon.subscriptions,
+:root[data-theme='dark'] .report-date-range input,
+:root[data-theme='dark'] .report-table th,
+:root[data-theme='dark'] .field input,
+:root[data-theme='dark'] .field select,
+:root[data-theme='dark'] .field textarea,
+:root[data-theme='dark'] .form-footer,
+:root[data-theme='dark'] .timeline-dot,
+:root[data-theme='dark'] .auth-page,
+:root[data-theme='dark'] .install-panel,
+:root[data-theme='dark'] .install-icon,
+:root[data-theme='dark'] .settings-form .field input[readonly] {
+  background: var(--surface-soft);
+}
+:root[data-theme='dark'] .skip-link,
+:root[data-theme='dark'] .button-secondary,
+:root[data-theme='dark'] .filter-button,
+:root[data-theme='dark'] .filter-grid input,
+:root[data-theme='dark'] .filter-grid select,
+:root[data-theme='dark'] .record-menu > div,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .toast,
+:root[data-theme='dark'] .login-card .field input {
+  background: var(--surface);
+}
+:root[data-theme='dark'] .breadcrumb,
+:root[data-theme='dark'] .local-status,
+:root[data-theme='dark'] .button-secondary,
+:root[data-theme='dark'] .button-ghost,
+:root[data-theme='dark'] kbd,
+:root[data-theme='dark'] .icon-button,
+:root[data-theme='dark'] .icon-button:hover,
+:root[data-theme='dark'] .eyebrow,
+:root[data-theme='dark'] .dashboard-intro p,
+:root[data-theme='dark'] .page-intro p,
+:root[data-theme='dark'] .today,
+:root[data-theme='dark'] .quick-heading .eyebrow,
+:root[data-theme='dark'] .private-badge,
+:root[data-theme='dark'] .quick-input-row input,
+:root[data-theme='dark'] .quick-input-row input::placeholder,
+:root[data-theme='dark'] .quick-foot p,
+:root[data-theme='dark'] .quick-foot > span,
+:root[data-theme='dark'] .overview-head > span,
+:root[data-theme='dark'] .metric-label,
+:root[data-theme='dark'] .metric-label svg,
+:root[data-theme='dark'] .metric-card p,
+:root[data-theme='dark'] .metric-blue .metric-label svg,
+:root[data-theme='dark'] .secondary-metrics > div > span,
+:root[data-theme='dark'] .onboarding-icon,
+:root[data-theme='dark'] .onboarding p,
+:root[data-theme='dark'] .section-head p,
+:root[data-theme='dark'] .small-select,
+:root[data-theme='dark'] .chart-tabs button,
+:root[data-theme='dark'] .category-legend span,
+:root[data-theme='dark'] .empty-icon,
+:root[data-theme='dark'] .empty p,
+:root[data-theme='dark'] .text-button,
+:root[data-theme='dark'] .activity-icon,
+:root[data-theme='dark'] .activity-description small,
+:root[data-theme='dark'] .tag,
+:root[data-theme='dark'] .cycle-panel .section-head > svg,
+:root[data-theme='dark'] .cycle-panel > p,
+:root[data-theme='dark'] .quiet-empty,
+:root[data-theme='dark'] .quiet-empty p,
+:root[data-theme='dark'] .upcoming-row small,
+:root[data-theme='dark'] .workspace-foot,
+:root[data-theme='dark'] .search-field,
+:root[data-theme='dark'] .search-field input::placeholder,
+:root[data-theme='dark'] .filter-button,
+:root[data-theme='dark'] .filter-button.active,
+:root[data-theme='dark'] .trash-toggle,
+:root[data-theme='dark'] .filter-grid label,
+:root[data-theme='dark'] .transaction-table th,
+:root[data-theme='dark'] .table-description small,
+:root[data-theme='dark'] .account-cell,
+:root[data-theme='dark'] .destination-cell,
+:root[data-theme='dark'] .date-cell,
+:root[data-theme='dark'] .deleted-row .table-description strong,
+:root[data-theme='dark'] .table-footer,
+:root[data-theme='dark'] .record-summary > div > span,
+:root[data-theme='dark'] .record-summary > p,
+:root[data-theme='dark'] .record-icon,
+:root[data-theme='dark'] .record-icon.subscriptions,
+:root[data-theme='dark'] .record-card-head p,
+:root[data-theme='dark'] .record-menu button,
+:root[data-theme='dark'] .record-details span,
+:root[data-theme='dark'] .record-notes,
+:root[data-theme='dark'] .schedule-price span,
+:root[data-theme='dark'] .schedule-due > span:first-child,
+:root[data-theme='dark'] .schedule-account,
+:root[data-theme='dark'] .page-note,
+:root[data-theme='dark'] .report-controls > label,
+:root[data-theme='dark'] .report-controls select,
+:root[data-theme='dark'] .report-date-range label,
+:root[data-theme='dark'] .report-date-range input,
+:root[data-theme='dark'] .report-date-range > span,
+:root[data-theme='dark'] .report-period,
+:root[data-theme='dark'] .report-tabs button,
+:root[data-theme='dark'] .report-metrics p,
+:root[data-theme='dark'] .report-table th,
+:root[data-theme='dark'] .report-table td,
+:root[data-theme='dark'] .modal-header p,
+:root[data-theme='dark'] .field > span,
+:root[data-theme='dark'] .field input::placeholder,
+:root[data-theme='dark'] .field textarea::placeholder,
+:root[data-theme='dark'] .field small,
+:root[data-theme='dark'] .form-note,
+:root[data-theme='dark'] .advanced-toggle,
+:root[data-theme='dark'] .loading,
+:root[data-theme='dark'] .quick-manual,
+:root[data-theme='dark'] .confirm-body,
+:root[data-theme='dark'] .history-event-head time,
+:root[data-theme='dark'] .history-timeline dt,
+:root[data-theme='dark'] .history-timeline dd,
+:root[data-theme='dark'] .before-value,
+:root[data-theme='dark'] .change-arrow,
+:root[data-theme='dark'] .storage-note,
+:root[data-theme='dark'] .storage-note p,
+:root[data-theme='dark'] .toast,
+:root[data-theme='dark'] .toast p,
+:root[data-theme='dark'] .connection-error,
+:root[data-theme='dark'] .topbar kbd,
+:root[data-theme='dark'] .login-card > .eyebrow,
+:root[data-theme='dark'] .login-card > p,
+:root[data-theme='dark'] .login-card .field > span,
+:root[data-theme='dark'] .login-card .field input::placeholder,
+:root[data-theme='dark'] .auth-connection > svg,
+:root[data-theme='dark'] .auth-connection > p,
+:root[data-theme='dark'] .install-icon,
+:root[data-theme='dark'] .install-panel p,
+:root[data-theme='dark'] .install-panel p.install-instruction,
+:root[data-theme='dark'] .workspace-user,
+:root[data-theme='dark'] .quick-ai-note p,
+:root[data-theme='dark'] .settings-section-head p,
+:root[data-theme='dark'] .settings-hint,
+:root[data-theme='dark'] .mobile-bottom-nav a {
+  color: var(--muted);
+}
+:root[data-theme='dark'] .breadcrumb strong,
+:root[data-theme='dark'] h1,
+:root[data-theme='dark'] .quick-label,
+:root[data-theme='dark'] .metric-number,
+:root[data-theme='dark'] .secondary-metrics .money-values,
+:root[data-theme='dark'] .onboarding h3,
+:root[data-theme='dark'] .category-legend strong,
+:root[data-theme='dark'] .empty h3,
+:root[data-theme='dark'] .activity-description strong,
+:root[data-theme='dark'] .activity-amount strong,
+:root[data-theme='dark'] .cycle-panel > h3,
+:root[data-theme='dark'] .upcoming-row strong,
+:root[data-theme='dark'] .filter-grid input,
+:root[data-theme='dark'] .filter-grid select,
+:root[data-theme='dark'] .table-description strong,
+:root[data-theme='dark'] .table-amount,
+:root[data-theme='dark'] .record-summary .money-values,
+:root[data-theme='dark'] .record-card h3,
+:root[data-theme='dark'] .schedule-card h3,
+:root[data-theme='dark'] .record-balance > span,
+:root[data-theme='dark'] .record-balance strong,
+:root[data-theme='dark'] .record-details strong,
+:root[data-theme='dark'] .unassigned-panel .money-values,
+:root[data-theme='dark'] .schedule-price strong,
+:root[data-theme='dark'] .report-metrics strong,
+:root[data-theme='dark'] .report-metrics .money-values,
+:root[data-theme='dark'] .modal-header h2,
+:root[data-theme='dark'] .field input,
+:root[data-theme='dark'] .field select,
+:root[data-theme='dark'] .field textarea,
+:root[data-theme='dark'] .storage-note strong,
+:root[data-theme='dark'] .login-card h2,
+:root[data-theme='dark'] .install-panel h3,
+:root[data-theme='dark'] .settings-form .field input[readonly] {
+  color: var(--text-strong);
+}
+:root[data-theme='dark'] .button-secondary,
+:root[data-theme='dark'] .button-secondary:hover:enabled,
+:root[data-theme='dark'] .small-select,
+:root[data-theme='dark'] .filter-button.active {
+  border-color: var(--control-line);
+}
+:root[data-theme='dark'] .button-secondary:hover:enabled,
+:root[data-theme='dark'] .button-ghost:hover:enabled,
+:root[data-theme='dark'] .icon-button:hover,
+:root[data-theme='dark'] .activity-row:hover,
+:root[data-theme='dark'] .transaction-table tr:hover td,
+:root[data-theme='dark'] .record-menu button:hover {
+  background: var(--hover);
+}
+:root[data-theme='dark'] .quick-entry,
+:root[data-theme='dark'] .quick-input-row input,
+:root[data-theme='dark'] .onboarding,
+:root[data-theme='dark'] .onboarding-icon,
+:root[data-theme='dark'] .modal,
+:root[data-theme='dark'] .toast,
+:root[data-theme='dark'] .login-symbol,
+:root[data-theme='dark'] .login-card > .auth-status,
+:root[data-theme='dark'] .install-panel {
+  border: 1px solid var(--line);
+}
+:root[data-theme='dark'] .quick-entry {
+  border-left: 3px solid var(--line);
+}
+:root[data-theme='dark'] .metric-teal,
+:root[data-theme='dark'] .report-tabs button.active,
+:root[data-theme='dark'] .toast-error {
+  border-color: var(--line);
+}
+:root[data-theme='dark'] .secondary-metrics > div {
+  border-right: 1px solid var(--line);
+}
+:root[data-theme='dark'] .onboarding,
+:root[data-theme='dark'] .activity-icon,
+:root[data-theme='dark'] .tag-blue,
+:root[data-theme='dark'] .settings-symbol-blue {
+  background: var(--blue-soft);
+}
+:root[data-theme='dark'] .chart-tabs,
+:root[data-theme='dark'] .activity-row,
+:root[data-theme='dark'] .upcoming-row,
+:root[data-theme='dark'] .transaction-table td,
+:root[data-theme='dark'] .record-balance,
+:root[data-theme='dark'] .schedule-due,
+:root[data-theme='dark'] .report-tabs,
+:root[data-theme='dark'] .report-metrics > div,
+:root[data-theme='dark'] .report-table th,
+:root[data-theme='dark'] .report-table td {
+  border-bottom: 1px solid var(--line);
+}
+:root[data-theme='dark'] .chart-tabs button.active,
+:root[data-theme='dark'] .text-button:hover,
+:root[data-theme='dark'] .report-tabs button.active,
+:root[data-theme='dark'] .login-symbol {
+  color: var(--teal);
+}
+:root[data-theme='dark'] .chart-tabs button.active {
+  border-bottom-color: var(--line);
+}
+:root[data-theme='dark'] .type-INCOME,
+:root[data-theme='dark'] .type-REFUND,
+:root[data-theme='dark'] .tag-teal,
+:root[data-theme='dark'] .filter-button.active,
+:root[data-theme='dark'] .workspace-result,
+:root[data-theme='dark'] .login-symbol,
+:root[data-theme='dark'] .login-card > .auth-status,
+:root[data-theme='dark'] .settings-symbol,
+:root[data-theme='dark'] .settings-privacy,
+:root[data-theme='dark'] .settings-success,
+:root[data-theme='dark'] .mobile-bottom-nav a.active,
+:root[data-theme='dark'] .mobile-bottom-nav a:active,
+:root[data-theme='dark'] .report-tabs button.active {
+  background: var(--teal-soft);
+}
+:root[data-theme='dark'] .type-INCOME,
+:root[data-theme='dark'] .type-REFUND,
+:root[data-theme='dark'] .tag-teal,
+:root[data-theme='dark'] .workspace-result,
+:root[data-theme='dark'] .login-card > .auth-status,
+:root[data-theme='dark'] .settings-privacy,
+:root[data-theme='dark'] .settings-success {
+  color: var(--success-text);
+}
+:root[data-theme='dark'] .type-DEBT_PAYMENT,
+:root[data-theme='dark'] .type-DEBT_USAGE,
+:root[data-theme='dark'] .record-icon.debts {
+  background: var(--purple-soft);
+}
+:root[data-theme='dark'] .type-DEBT_PAYMENT,
+:root[data-theme='dark'] .type-DEBT_USAGE,
+:root[data-theme='dark'] .record-icon.debts {
+  color: var(--purple-text);
+}
+:root[data-theme='dark'] .tag-blue {
+  color: var(--blue);
+}
+:root[data-theme='dark'] .tag-red,
+:root[data-theme='dark'] .record-menu button.danger-text,
+:root[data-theme='dark'] .error-message,
+:root[data-theme='dark'] .toast-error,
+:root[data-theme='dark'] .toast-error p,
+:root[data-theme='dark'] .install-panel .install-error {
+  color: var(--danger);
+}
+:root[data-theme='dark'] .tag-red,
+:root[data-theme='dark'] .error-message {
+  background: var(--danger-soft);
+}
+:root[data-theme='dark'] .filter-button,
+:root[data-theme='dark'] .filter-grid input,
+:root[data-theme='dark'] .filter-grid select,
+:root[data-theme='dark'] .field input,
+:root[data-theme='dark'] .field select,
+:root[data-theme='dark'] .field textarea {
+  border: 1px solid var(--control-line);
+}
+:root[data-theme='dark'] .record-notes,
+:root[data-theme='dark'] .advanced-toggle,
+:root[data-theme='dark'] .quick-ai-note {
+  border-top: 1px solid var(--line);
+}
+:root[data-theme='dark'] .notice,
+:root[data-theme='dark'] .offline-banner {
+  border: 1px solid var(--warning-line);
+}
+:root[data-theme='dark'] .notice,
+:root[data-theme='dark'] .offline-banner {
+  background: var(--warning-soft);
+}
+:root[data-theme='dark'] .notice,
+:root[data-theme='dark'] .offline-banner {
+  color: var(--warning-text);
+}
+:root[data-theme='dark'] .error-message {
+  border: 1px solid var(--danger-line);
+}
+:root[data-theme='dark'] .history-timeline article {
+  border-left: 1px solid var(--line);
+}
+:root[data-theme='dark'] .timeline-dot {
+  border: 2px solid var(--line);
+}
+:root[data-theme='dark'] .auth-privacy-note {
+  color: var(--muted) !important;
+}
+:root[data-theme='dark'] .login-offline {
+  color: var(--warning-text) !important;
+}
+
+/* Header, navigation and appearance choices share the same theme surfaces. */
+.sidebar {
+  background: var(--surface);
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+}
+.sidebar .brand-mark {
+  width: 44px;
+  height: 44px;
+}
+.sidebar-caption,
+.sidebar-note p,
+.workspace-button small,
+.workspace-button > svg {
+  color: var(--muted);
+}
+.sidebar-note {
+  border-color: var(--line);
+}
+.sidebar-note strong,
+.workspace-button {
+  color: var(--text);
+}
+.sidebar-note svg {
+  color: var(--teal);
+}
+.workspace-avatar {
+  background: var(--teal-soft);
+}
+.nav-item:hover {
+  color: var(--text);
+  background: var(--hover);
+}
+.nav-item.active {
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+.nav-current {
+  background: var(--teal);
+}
+.sidebar-logout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+}
+.sidebar-logout:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+.topbar-left {
+  gap: 10px;
+}
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+.topbar-brand .brand-mark {
+  width: 36px;
+  height: 36px;
+}
+.breadcrumb > a,
+.breadcrumb > svg {
+  display: none;
+}
+.breadcrumb strong {
+  font-size: 14px;
+  color: var(--text);
+}
+.theme-settings-panel {
+  grid-column: 1 / -1;
+}
+.theme-settings {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.theme-settings legend {
+  padding: 0;
+  margin-bottom: 10px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.theme-settings .settings-hint {
+  color: var(--muted);
+  margin-bottom: 20px;
+  line-height: 1.7;
+}
+.theme-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.theme-option {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--control-line);
+  border-radius: 12px;
+  background: var(--surface);
+  cursor: pointer;
+  transition:
+    background 0.16s,
+    border-color 0.16s;
+}
+.theme-option:hover {
+  background: var(--surface-soft);
+}
+.theme-option:has(input:checked) {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+}
+.theme-option:has(input:focus-visible) {
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
+}
+.theme-option input {
+  position: absolute;
+  top: 17px;
+  right: 13px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--accent-solid);
+}
+.theme-option-icon {
+  display: flex;
+  color: var(--teal);
+}
+.theme-option-copy strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.theme-option-copy small {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+:root[data-theme='dark'] .quick-entry {
+  background: linear-gradient(105deg, var(--teal-soft), var(--surface-soft));
+  border-color: var(--teal-line);
+}
+:root[data-theme='dark'] .quick-input-row input {
+  background: var(--surface);
+}
+:root[data-theme='dark'] .modal::backdrop,
+:root[data-theme='dark'] .sidebar-backdrop {
+  background: #00000080;
+}
+:root[data-theme='dark'] .modal {
+  box-shadow: 0 30px 100px var(--shadow-color);
+}
+:root[data-theme='dark'] .mobile-bottom-nav {
+  box-shadow: 0 8px 28px var(--shadow-color);
+}
+:root[data-theme='dark'] .mobile-bottom-nav a.active {
+  color: var(--teal);
+}
+:root[data-theme='dark'] .metric-teal .metric-number {
+  color: var(--teal);
+}
+:root[data-theme='dark'] .local-status i,
+:root[data-theme='dark'] .timeline-dot {
+  background: var(--teal);
+}
+:root[data-theme='dark'] .settings-symbol.settings-symbol-blue {
+  background: var(--blue-soft);
+}
+:root[data-theme='dark'] ::selection {
+  color: var(--text);
+  background: var(--teal-line);
+}
+@media (max-width: 900px), (max-width: 1100px) and (max-height: 500px) {
+  .sidebar {
+    border-right: 0;
+    border-left: 1px solid var(--line);
+  }
+  .mobile-menu-button {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    margin: 0;
+    color: var(--text);
+  }
+  .mobile-sidebar-close {
+    color: var(--muted);
+  }
+  .mobile-sidebar-close:hover {
+    color: var(--text);
+    background: var(--hover);
+  }
+  .theme-options {
+    gap: 8px;
+  }
+  .theme-option {
+    padding: 14px 12px;
   }
 }

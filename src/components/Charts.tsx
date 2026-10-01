@@ -19,7 +19,23 @@ import { CURRENCIES, type Currency, type FinancialContext } from '../../shared/t
 import { money, shortDate } from '../format';
 import { Empty, Panel, SectionHead } from './ui';
 
-const PALETTE = ['#277e78', '#5888ba', '#91b6b3', '#aebbd5', '#d4aa7b', '#c28585', '#718494'];
+const PALETTE = [
+  'var(--teal)',
+  'var(--blue)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'var(--chart-6)',
+  'var(--chart-7)',
+];
+const TOOLTIP_STYLE = {
+  borderRadius: 12,
+  border: '1px solid var(--line)',
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text)',
+  boxShadow: '0 8px 30px var(--shadow-color)',
+  fontSize: 13,
+};
 type ChartKind = 'cash' | 'income' | 'daily' | 'debt';
 export function TrendChart({
   context,
@@ -66,13 +82,13 @@ export function TrendChart({
   ];
   const axis = (
     <>
-      <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="#e7ecef" />
+      <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="var(--line)" />
       <XAxis
         dataKey="date"
         tickFormatter={shortDate}
         tickLine={false}
         axisLine={false}
-        tick={{ fontSize: 11, fill: '#73818b' }}
+        tick={{ fontSize: 11, fill: 'var(--muted)' }}
         minTickGap={25}
       />
       <YAxis
@@ -84,7 +100,7 @@ export function TrendChart({
         width={48}
         tickLine={false}
         axisLine={false}
-        tick={{ fontSize: 11, fill: '#73818b' }}
+        tick={{ fontSize: 11, fill: 'var(--muted)' }}
       />
       <Tooltip
         formatter={(_value, name, item) => [
@@ -92,12 +108,10 @@ export function TrendChart({
           String(name),
         ]}
         labelFormatter={(label) => shortDate(String(label))}
-        contentStyle={{
-          borderRadius: 12,
-          border: '1px solid #e7ecef',
-          boxShadow: '0 8px 30px #12233112',
-          fontSize: 13,
-        }}
+        contentStyle={TOOLTIP_STYLE}
+        labelStyle={{ color: 'var(--muted)' }}
+        itemStyle={{ color: 'var(--text)' }}
+        cursor={{ fill: 'var(--hover)', stroke: 'var(--line)' }}
       />
     </>
   );
@@ -153,8 +167,8 @@ export function TrendChart({
               <AreaChart data={rows} margin={{ top: 12, right: 12, bottom: 5, left: 0 }}>
                 <defs>
                   <linearGradient id="cash-fill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#277e78" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#277e78" stopOpacity={0.01} />
+                    <stop offset="0%" stopColor="var(--teal)" stopOpacity={0.18} />
+                    <stop offset="100%" stopColor="var(--teal)" stopOpacity={0.01} />
                   </linearGradient>
                 </defs>
                 {axis}
@@ -162,7 +176,7 @@ export function TrendChart({
                   type="monotone"
                   dataKey="cash"
                   name="Nakit bakiyesi"
-                  stroke="#277e78"
+                  stroke="var(--teal)"
                   strokeWidth={2.5}
                   fill="url(#cash-fill)"
                   isAnimationActive={false}
@@ -175,20 +189,21 @@ export function TrendChart({
                   iconType="circle"
                   iconSize={7}
                   wrapperStyle={{ fontSize: 12, paddingTop: 18 }}
+                  formatter={(value) => <span style={{ color: 'var(--muted)' }}>{value}</span>}
                 />
                 {kind === 'income' ? (
                   <>
                     <Bar
                       dataKey="income"
                       name="Gelir"
-                      fill="#277e78"
+                      fill="var(--teal)"
                       radius={[4, 4, 0, 0]}
                       isAnimationActive={false}
                     />
                     <Bar
                       dataKey="expense"
                       name="Gerçek harcamalar"
-                      fill="#5888ba"
+                      fill="var(--blue)"
                       radius={[4, 4, 0, 0]}
                       isAnimationActive={false}
                     />
@@ -198,14 +213,14 @@ export function TrendChart({
                     <Bar
                       dataKey="usage"
                       name="Yeni borç kullanımı"
-                      fill="#5888ba"
+                      fill="var(--blue)"
                       radius={[4, 4, 0, 0]}
                       isAnimationActive={false}
                     />
                     <Bar
                       dataKey="paid"
                       name="Ödenen borç"
-                      fill="#277e78"
+                      fill="var(--teal)"
                       radius={[4, 4, 0, 0]}
                       isAnimationActive={false}
                     />
@@ -214,7 +229,7 @@ export function TrendChart({
                   <Bar
                     dataKey="expense"
                     name="Gerçek harcamalar"
-                    fill="#5888ba"
+                    fill="var(--blue)"
                     radius={[4, 4, 0, 0]}
                     isAnimationActive={false}
                   />
@@ -293,7 +308,10 @@ export function CategoryChart({ context }: { context: FinancialContext }) {
                 </Pie>
                 <Tooltip
                   formatter={(_value, _name, item) => money(item.payload.amount, currency)}
-                  contentStyle={{ borderRadius: 12, fontSize: 13 }}
+                  contentStyle={TOOLTIP_STYLE}
+                  labelStyle={{ color: 'var(--muted)' }}
+                  itemStyle={{ color: 'var(--text)' }}
+                  cursor={{ fill: 'var(--hover)', stroke: 'var(--line)' }}
                 />
               </PieChart>
             </ResponsiveContainer>

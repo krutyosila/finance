@@ -301,7 +301,7 @@ export function App() {
             onClick={() => setMobileOpen(false)}
             aria-label="Kasa ana sayfa"
           >
-            <Brand light decorative />
+            <Brand mark decorative />
           </a>
           <IconButton
             label="Menüyü kapat"
@@ -328,6 +328,20 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-bottom">
+          {session.required && (
+            <button
+              type="button"
+              className="sidebar-logout"
+              aria-label="Çıkış yap"
+              onClick={() => {
+                setMobileOpen(false);
+                void logout();
+              }}
+            >
+              <LogOut size={18} aria-hidden="true" />
+              <span>Çıkış yap</span>
+            </button>
+          )}
           <div className="sidebar-note">
             <ShieldCheck size={19} />
             <strong>Yalnızca siz ve finansınız.</strong>
@@ -362,15 +376,9 @@ export function App() {
       <div className="main-shell" inert={mobileOpen}>
         <header className="topbar">
           <div className="topbar-left">
-            <IconButton
-              label={mobileOpen ? 'Menüyü kapat' : 'Menüyü aç'}
-              className="mobile-menu-button"
-              aria-expanded={mobileOpen}
-              aria-controls="main-navigation"
-              onClick={() => setMobileOpen(!mobileOpen)}
-            >
-              <Menu size={21} />
-            </IconButton>
+            <a className="topbar-brand" href="#/dashboard" aria-label="Kasa ana sayfa">
+              <Brand mark decorative />
+            </a>
             <div className="breadcrumb">
               <a href="#/dashboard" aria-label="Ana sayfaya dön">
                 Ana sayfa
@@ -384,11 +392,15 @@ export function App() {
               <i />
               {session.required ? 'Size ait. Güvenli oturum.' : 'Size ait. Bilgisayarınızda.'}
             </span>
-            {session.required && (
-              <IconButton label="Çıkış yap" onClick={() => void logout()}>
-                <LogOut size={18} />
-              </IconButton>
-            )}
+            <IconButton
+              label={mobileOpen ? 'Menüyü kapat' : 'Menüyü aç'}
+              className="mobile-menu-button"
+              aria-expanded={mobileOpen}
+              aria-controls="main-navigation"
+              onClick={() => setMobileOpen(!mobileOpen)}
+            >
+              <Menu size={21} aria-hidden="true" />
+            </IconButton>
           </div>
         </header>
         <main id="main-content" className="main-content" tabIndex={-1}>

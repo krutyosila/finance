@@ -1,9 +1,20 @@
 import { useState } from 'react';
-import { Check, KeyRound, LoaderCircle, LockKeyhole, ShieldCheck, Sparkles } from 'lucide-react';
+import {
+  Check,
+  KeyRound,
+  LoaderCircle,
+  LockKeyhole,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sparkles,
+  Sun,
+} from 'lucide-react';
 import { api, useResource } from '../api';
 import { useAuth } from '../auth';
 import { usePwa } from '../pwa';
 import { Button, ErrorMessage, Field, Loading, PageIntro, Panel, Tag } from '../components/ui';
+import { useTheme, type ThemePreference } from '../theme';
 
 interface AiSettings {
   provider: 'openai';
@@ -29,9 +40,12 @@ export function Settings() {
       <PageIntro
         eyebrow="KENDİ ALANINIZ, KENDİ TERCİHLERİNİZ"
         title="Ayarlar"
-        description="Hızlı kayıt için OpenAI bağlantınızı ve hesap güvenliğinizi yönetin."
+        description="Görünümünüzü, hızlı kayıt bağlantınızı ve hesap güvenliğinizi yönetin."
       />
       <div className="settings-layout">
+        <Panel className="settings-panel theme-settings-panel">
+          <AppearanceSettings />
+        </Panel>
         <Panel className="settings-panel">
           {settings.loading && !settings.data ? (
             <Loading text="OpenAI ayarları yükleniyor…" />
@@ -48,6 +62,48 @@ export function Settings() {
         )}
       </div>
     </>
+  );
+}
+
+function AppearanceSettings() {
+  const { preference, setPreference } = useTheme();
+  const options: {
+    value: ThemePreference;
+    label: string;
+    description: string;
+    icon: typeof Monitor;
+  }[] = [
+    { value: 'system', label: 'Sistem', description: 'Cihazınızla aynı', icon: Monitor },
+    { value: 'light', label: 'Açık', description: 'Aydınlık görünüm', icon: Sun },
+    { value: 'dark', label: 'Koyu', description: 'Karanlık görünüm', icon: Moon },
+  ];
+  return (
+    <fieldset className="theme-settings">
+      <legend>Görünüm</legend>
+      <p className="settings-hint">
+        Sistem seçildiğinde tema, cihazınızın açık veya koyu görünümüne göre değişir.
+      </p>
+      <div className="theme-options">
+        {options.map(({ value, label, description, icon: Icon }) => (
+          <label className="theme-option" key={value}>
+            <input
+              type="radio"
+              name="theme"
+              value={value}
+              checked={preference === value}
+              onChange={() => setPreference(value)}
+            />
+            <span className="theme-option-icon" aria-hidden="true">
+              <Icon size={22} />
+            </span>
+            <span className="theme-option-copy">
+              <strong>{label}</strong>
+              <small>{description}</small>
+            </span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
   );
 }
 

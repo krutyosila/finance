@@ -20,7 +20,9 @@ import './styles.css';
 import { App } from './App';
 import { AuthProvider } from './auth';
 import { PwaProvider, registerProductionWorker } from './pwa';
+import { initializeTheme } from './theme';
 
+initializeTheme();
 registerProductionWorker();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

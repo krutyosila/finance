@@ -29,6 +29,9 @@ const { chromium } = playwright;
 const baseURL = process.env.MOBILE_QA_URL || 'http://127.0.0.1:5173';
 const output = process.env.MOBILE_QA_OUTPUT || join(tmpdir(), 'finance-mobile-qa');
 const baseline = process.argv.includes('--baseline');
+const focusTheme = process.env.MOBILE_QA_FOCUS === 'theme';
+const skipThemeWorkflow = process.env.MOBILE_QA_SKIP_THEME_WORKFLOW === '1';
+const initialColorScheme = process.env.MOBILE_QA_THEME === 'dark' ? 'dark' : 'light';
 const stamp = '2026-10-01T12:00:00.000Z';
 const longName = 'UzunHesapAdıKesintisizSözcük'.repeat(3);
 const longDescription = `İstanbul'daki iş ve kişisel giderlerin ayrıntılı açıklaması ${longName}`;
@@ -245,6 +248,7 @@ const results = [];
 let currentSize = '';
 let currentScreen = '';
 let aiRequests = 0;
+let logoutRequests = 0;
 
 function check(condition, message, detail) {
   try {
@@ -369,6 +373,325 @@ async function go(page, path) {
 async function close(page) {
   await page.keyboard.press('Escape');
   await page.locator('dialog[open]').waitFor({ state: 'hidden', timeout: 3000 });
+}
+
+async function headerGeometry(page, path, mobile) {
+  const expectedPage = titles[path] || 'Genel bakış';
+  const header = await page.locator('.topbar').evaluate((element) => {
+    const brand = element.querySelector('.topbar-brand');
+    const image = brand?.querySelector('img');
+    const title = element.querySelector('.breadcrumb strong');
+    const menu = element.querySelector('.mobile-menu-button');
+    const rect = (node) => node?.getBoundingClientRect().toJSON();
+    return {
+      brand: rect(brand),
+      image: image?.getAttribute('src'),
+      brandText: brand?.textContent.trim(),
+      title: rect(title),
+      titleText: title?.textContent.trim(),
+      menu: rect(menu),
+      logoutCount: element.querySelectorAll('[aria-label="Çıkış yap"]').length,
+      menuLogoutCount: document.querySelectorAll('.sidebar [aria-label="Çıkış yap"]').length,
+    };
+  });
+  check(
+    header.brand?.width > 0 &&
+      header.image?.includes('/brand/kasa-mark') &&
+      header.brandText === '' &&
+      header.titleText === expectedPage &&
+      header.brand.right <= header.title.left + 1,
+    `${path}: header uses a mark followed by the current page name`,
+    header,
+  );
+  if (mobile)
+    check(
+      header.menu?.width >= 44 &&
+        header.menu.height >= 44 &&
+        header.menu.left > header.title.right &&
+        header.menu.right <= page.viewportSize().width + 1,
+      `${path}: accessible menu button sits to the right of the page name`,
+      header,
+    );
+  check(
+    header.logoutCount === 0 && header.menuLogoutCount === 1,
+    `${path}: hosted-session logout belongs to the navigation menu`,
+    header,
+  );
+}
+
+async function rightDrawerGeometry(page, mobile) {
+  if (!mobile) return;
+  const drawer = page.locator('.sidebar');
+  const closed = await drawer.boundingBox();
+  check(
+    closed?.x >= page.viewportSize().width - 1,
+    'closed mobile drawer rests outside the right edge',
+    closed,
+  );
+  await page.getByRole('button', { name: 'Menüyü aç', exact: true }).click();
+  await page.locator('.sidebar-open').waitFor();
+  await page.waitForFunction(() => {
+    const bounds = document.querySelector('.sidebar-open').getBoundingClientRect();
+    return Math.abs(bounds.right - innerWidth) <= 1;
+  });
+  const open = await drawer.boundingBox();
+  check(
+    open.x > 0 &&
+      Math.abs(open.x + open.width - page.viewportSize().width) <= 1 &&
+      Math.abs(open.y) <= 1 &&
+      Math.abs(open.height - page.viewportSize().height) <= 1,
+    'mobile drawer opens against the right edge and fills the visible height',
+    open,
+  );
+  check(
+    await drawer.getByRole('button', { name: 'Çıkış yap', exact: true }).isVisible(),
+    'logout remains reachable inside the open mobile drawer',
+  );
+  if (page.viewportSize().height >= 800) {
+    await drawer.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    const logout = await drawer
+      .getByRole('button', { name: 'Çıkış yap', exact: true })
+      .boundingBox();
+    check(
+      logout.y >= 0 && logout.y + logout.height <= page.viewportSize().height + 1,
+      'logout is visible without scrolling the menu on a tall phone screen',
+      logout,
+    );
+  }
+}
+
+async function themeSurface(page, selector) {
+  return page
+    .locator(selector)
+    .first()
+    .evaluate((element) => {
+      const opaqueBackground = (node) => {
+        for (let parent = node; parent; parent = parent.parentElement) {
+          const background = getComputedStyle(parent).backgroundColor;
+          if (background !== 'rgba(0, 0, 0, 0)' && background !== 'transparent') return background;
+        }
+        return 'rgb(255, 255, 255)';
+      };
+      const rgb = (value) =>
+        value
+          .match(/[\d.]+/g)
+          ?.slice(0, 3)
+          .map(Number) || [0, 0, 0];
+      const luminance = (value) => {
+        const [red, green, blue] = rgb(value).map((component) => {
+          const channel = component / 255;
+          return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+        });
+        return red * 0.2126 + green * 0.7152 + blue * 0.0722;
+      };
+      const color = getComputedStyle(element).color;
+      const background = opaqueBackground(element);
+      const foregroundLuminance = luminance(color);
+      const backgroundLuminance = luminance(background);
+      return {
+        color,
+        background,
+        contrast:
+          (Math.max(foregroundLuminance, backgroundLuminance) + 0.05) /
+          (Math.min(foregroundLuminance, backgroundLuminance) + 0.05),
+      };
+    });
+}
+
+async function themeChrome(page, theme) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+  const appearance = await page.locator('.topbar').evaluate((element) => ({
+    theme: document.documentElement.dataset.theme,
+    scheme: getComputedStyle(document.documentElement).colorScheme,
+    color: getComputedStyle(element).backgroundColor,
+    rootColor: getComputedStyle(document.documentElement).backgroundColor,
+    metadata: document.querySelector('meta[name="theme-color"]')?.content,
+  }));
+  const color = theme === 'dark' ? 'rgb(20, 35, 44)' : 'rgb(255, 255, 255)';
+  const metadata = theme === 'dark' ? '#14232c' : '#ffffff';
+  check(
+    appearance.theme === theme &&
+      appearance.scheme === theme &&
+      appearance.color === color &&
+      appearance.metadata === metadata,
+    `${theme}: browser theme metadata and header use the same surface`,
+    appearance,
+  );
+  check(
+    appearance.rootColor === color,
+    `${theme}: root background continues the header through the top cutout`,
+    appearance,
+  );
+}
+
+async function chooseTheme(page, preference, resolved) {
+  await page
+    .locator('.theme-option')
+    .filter({
+      has: page.locator(`input[name="theme"][value="${preference}"]`),
+    })
+    .click();
+  await page.waitForFunction(
+    (resolved) => document.documentElement.dataset.theme === resolved,
+    resolved,
+  );
+  check(
+    await page.locator(`input[name="theme"][value="${preference}"]`).isChecked(),
+    `${preference}: appearance control reflects the selected preference`,
+  );
+}
+
+async function verifyThemeWorkflow(page, mobile) {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await go(page, 'settings');
+  currentScreen = 'theme-settings';
+  check(
+    (await page.getByRole('radio').count()) === 3 &&
+      (await page.locator('input[name="theme"][value="system"]').isChecked()),
+    'appearance settings default to System with three native radio choices',
+  );
+  await themeChrome(page, 'light');
+  await screenshot(page, 'theme-light-settings');
+  if (mobile) {
+    await rightDrawerGeometry(page, mobile);
+    await screenshot(page, 'theme-light-right-menu');
+    await page.keyboard.press('Escape');
+    await page.locator('.sidebar-open').waitFor({ state: 'hidden' });
+  }
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  check(
+    await page.locator('input[name="theme"][value="system"]').isChecked(),
+    'runtime system theme change keeps the System preference selected',
+  );
+  await themeChrome(page, 'dark');
+  await widths(page, 'dark appearance settings');
+  await screenshot(page, 'theme-dark-settings');
+  await chooseTheme(page, 'light', 'light');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  check(
+    (await page.evaluate(() => document.documentElement.dataset.theme)) === 'light' &&
+      (await page.evaluate(() => localStorage.getItem('kasa-theme'))) === 'light',
+    'manual Light survives an operating-system change and is saved on this browser',
+  );
+  await themeChrome(page, 'light');
+  await chooseTheme(page, 'dark', 'dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+
+  // Hold only application scripts. The API fixture still handles every request through fallback.
+  let releaseScripts;
+  const scriptsHeld = new Promise((resolve) => {
+    releaseScripts = resolve;
+  });
+  const holdApplicationScripts = async (route) => {
+    const request = route.request();
+    if (
+      request.resourceType() === 'script' &&
+      new URL(request.url()).pathname !== '/theme-bootstrap-v1.js'
+    )
+      await scriptsHeld;
+    await route.fallback();
+  };
+  await page.route('**/*', holdApplicationScripts);
+  try {
+    await page.reload({ waitUntil: 'commit' });
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+    const startup = await page.evaluate(() => ({
+      theme: document.documentElement.dataset.theme,
+      color: document.querySelector('meta[name="theme-color"]')?.content,
+      renderedApp: document.getElementById('root')?.childElementCount || 0,
+    }));
+    check(
+      startup.theme === 'dark' && startup.color === '#14232c' && startup.renderedApp === 0,
+      'saved Dark is applied by the external startup script before the app renders',
+      startup,
+    );
+  } finally {
+    releaseScripts();
+    await page.unroute('**/*', holdApplicationScripts);
+  }
+  await go(page, 'settings');
+  currentScreen = 'theme-dark-content';
+  check(
+    await page.locator('input[name="theme"][value="dark"]').isChecked(),
+    'saved Dark selection is restored after reloading under a light system theme',
+  );
+  await themeChrome(page, 'dark');
+  await headerGeometry(page, 'settings', mobile);
+  await go(page, 'dashboard');
+  const panel = await themeSurface(page, '.trend-panel h2');
+  check(
+    panel.background === 'rgb(20, 35, 44)' && panel.contrast >= 4.5,
+    'dark dashboard panel text remains readable on the dark surface',
+    panel,
+  );
+  await screenshot(page, 'theme-dark-dashboard');
+  const chart = page.locator('.trend-panel .chart-canvas');
+  await chart.scrollIntoViewIfNeeded();
+  const chartBox = await chart.boundingBox();
+  await page.mouse.move(chartBox.x + chartBox.width * 0.6, chartBox.y + chartBox.height * 0.4);
+  await page.locator('.trend-panel .recharts-default-tooltip').waitFor({ state: 'visible' });
+  const tooltip = await themeSurface(page, '.trend-panel .recharts-default-tooltip');
+  const tooltipLabel = await themeSurface(page, '.trend-panel .recharts-tooltip-label');
+  check(
+    tooltip.background === 'rgb(20, 35, 44)' &&
+      tooltip.contrast >= 4.5 &&
+      tooltipLabel.contrast >= 4.5,
+    'dark chart tooltip and date label remain readable on a dark surface',
+    { tooltip, tooltipLabel },
+  );
+  await screenshot(page, 'theme-dark-chart-tooltip');
+  await go(page, 'accounts');
+  await page.getByRole('button', { name: 'Hesap ekle', exact: true }).click();
+  await modalFits(page, 'dark account form', mobile);
+  const modal = await themeSurface(page, 'dialog[open] h2');
+  const input = await themeSurface(page, 'dialog[open] input');
+  check(
+    modal.background === 'rgb(20, 35, 44)' && modal.contrast >= 4.5 && input.contrast >= 4.5,
+    'dark modal and form input text remain readable',
+    { modal, input },
+  );
+  await screenshot(page, 'theme-dark-form');
+  await close(page);
+  if (mobile) {
+    await rightDrawerGeometry(page, mobile);
+    await screenshot(page, 'theme-dark-right-menu');
+    await page.keyboard.press('Escape');
+    await page.locator('.sidebar-open').waitFor({ state: 'hidden' });
+  }
+  await go(page, 'settings');
+  await chooseTheme(page, 'system', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'dark');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+  check(
+    await page.locator('input[name="theme"][value="system"]').isChecked(),
+    'returning to System resumes following both runtime system theme changes',
+  );
+  const beforeLogout = logoutRequests;
+  if (mobile) await page.getByRole('button', { name: 'Menüyü aç', exact: true }).click();
+  await page.locator('.sidebar').getByRole('button', { name: 'Çıkış yap', exact: true }).click();
+  await page.locator('.login-card').waitFor();
+  await page.getByText('Çıkış yaptınız. Finansal alanınız kapatıldı.', { exact: true }).waitFor();
+  check(
+    logoutRequests === beforeLogout + 1 && (await page.locator('.main-shell').count()) === 0,
+    'menu logout makes one mocked logout request and closes the financial workspace',
+  );
+  await screenshot(page, 'theme-menu-logout');
+  await page.reload();
+  await go(page, 'dashboard');
+  await page.emulateMedia({ colorScheme: initialColorScheme });
+  await page.waitForFunction(
+    (theme) => document.documentElement.dataset.theme === theme,
+    initialColorScheme,
+  );
+  await themeChrome(page, initialColorScheme);
 }
 
 function selectField(page, label) {
@@ -822,6 +1145,7 @@ async function verifyFullscreenInstall(browser, size, mobile) {
       hasTouch: mobile,
       reducedMotion: 'reduce',
       serviceWorkers: 'block',
+      colorScheme: initialColorScheme,
     });
     await context.route('**/api/**', routeAPI);
     try {
@@ -886,7 +1210,10 @@ async function routeAPI(route) {
       authenticated: true,
       user: { email: 'mobile-qa@example.test', role: 'ADMIN' },
     };
-  else if (path === '/context' || path === '/reports') data = fixture;
+  else if (path === '/auth/logout') {
+    logoutRequests++;
+    data = { ok: true };
+  } else if (path === '/context' || path === '/reports') data = fixture;
   else if (path === '/transactions') data = transactions;
   else if (path === '/cycles') data = [cycle, { ...cycle, id: 'qa-previous-cycle', end: stamp }];
   else if (path === '/settings/ai')
@@ -999,6 +1326,7 @@ try {
       hasTouch: mobile,
       reducedMotion: 'reduce',
       serviceWorkers: 'block',
+      colorScheme: initialColorScheme,
     });
     await context.route('**/api/**', routeAPI);
     const page = await context.newPage();
@@ -1029,9 +1357,18 @@ try {
       const viewportMeta = await page.locator('meta[name=viewport]').getAttribute('content');
       check(viewportMeta.includes('viewport-fit=cover'), 'viewport includes cutout support');
     });
+    if (focusTheme) {
+      await step('theme', () => verifyThemeWorkflow(page, mobile));
+      console.log(
+        `${currentSize}: ${results.filter((x) => x.viewport === currentSize).length} assertions, ${findings.filter((x) => x.viewport === currentSize).length} findings`,
+      );
+      await context.close();
+      continue;
+    }
     for (const path of pages) {
       await step(path, async () => {
         await go(page, path);
+        if (!baseline) await headerGeometry(page, path, mobile);
         await widths(page);
         check(
           (await page.locator('main textarea').count()) === 0 || path === 'settings',
@@ -1096,12 +1433,13 @@ try {
     if (!baseline) await step('mobile-dock-viewport', () => verifyMobileDockViewport(page, mobile));
     if (!baseline && size.width === 390 && size.height === 844)
       await step('dock-breakpoint-focus', () => verifyDockBreakpointFocus(page));
+    if (!baseline && !skipThemeWorkflow && [390, 1280].includes(size.width))
+      await step('theme', () => verifyThemeWorkflow(page, mobile));
     if (mobile && !baseline)
       await step('drawer', async () => {
         await go(page, 'dashboard');
-        const menu = page.getByRole('button', { name: 'Menüyü aç', exact: true });
-        await menu.click();
-        await page.locator('.sidebar-open').waitFor();
+        const menu = page.locator('.mobile-menu-button');
+        await rightDrawerGeometry(page, mobile);
         for (let i = 0; i < 15; i++) await page.keyboard.press('Tab');
         check(
           await page.evaluate(() => !!document.activeElement.closest('.sidebar')),
@@ -1150,6 +1488,8 @@ try {
           for (const sheet of document.styleSheets) collect(sheet.cssRules);
           return {
             topbar: rect('.topbar'),
+            logo: rect('.topbar-brand'),
+            menu: rect('.mobile-menu-button'),
             nav: rect('.mobile-bottom-nav'),
             fab: rect('.quick-add-fab'),
             paddingTop: parseFloat(getComputedStyle(document.querySelector('.topbar')).paddingTop),
@@ -1168,12 +1508,16 @@ try {
         });
         check(
           safe.paddingTop >= 28 &&
+            Math.abs(safe.topbar.top) <= 1 &&
+            safe.logo.top >= 28 - 1 &&
+            safe.menu.top >= 28 - 1 &&
             safe.nav.bottom <= size.height - 22 - 24 + 1 &&
             safe.nav.left >= 18 + 18 - 1 &&
             safe.nav.right <= size.width - 18 - 18 + 1,
           'header and bottom navigation reserve simulated safe areas',
           safe,
         );
+        await themeChrome(page, await page.evaluate(() => document.documentElement.dataset.theme));
         checkMobileDockGeometry(await mobileDockGeometry(page), size, {
           left: 18,
           right: 18,
@@ -1212,6 +1556,7 @@ try {
         hasTouch: mobile,
         reducedMotion: 'reduce',
         serviceWorkers: 'block',
+        colorScheme: initialColorScheme,
       });
       await authContext.route('**/api/**', async (route) => {
         const pathname = new URL(route.request().url()).pathname;

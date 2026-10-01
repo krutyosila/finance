@@ -1,6 +1,7 @@
-const CACHE_NAME = 'kasa-static-v2';
+const CACHE_NAME = 'kasa-static-v3';
 const PUBLIC_FILES = new Set([
   '/offline.html',
+  '/theme-bootstrap-v1.js',
   '/manifest.webmanifest',
   '/kasa-v2.webmanifest',
   '/brand/kasa-mark.svg',

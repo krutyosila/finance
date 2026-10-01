@@ -316,6 +316,7 @@ describe('service worker privacy boundary', () => {
     ]);
     const unrelated = new Map([['/other-app.js', new Response('unrelated asset')]]);
     const previousKasa = new Map([['/offline.html', new Response('previous Kasa offline page')]]);
+    const previousKasaV2 = new Map([['/offline.html', new Response('Kasa v2 offline page')]]);
     const currentKasa = new Map<string, Response>();
     const stored = new Map<string, Map<string, Response>>([
       ['still-static-v0', new Map()],
@@ -323,13 +324,15 @@ describe('service worker privacy boundary', () => {
       ['still-static-v2', new Map()],
       ['kasa-static-v0', new Map()],
       ['kasa-static-v1', previousKasa],
-      ['kasa-static-v2', currentKasa],
+      ['kasa-static-v2', previousKasaV2],
+      ['kasa-static-v3', currentKasa],
       ['other-app-static-v1', unrelated],
     ]);
     const publicContent = new Map([
       ['/manifest.webmanifest', 'new manifest'],
       ['/kasa-v2.webmanifest', 'new manifest'],
       ['/offline.html', 'new offline page'],
+      ['/theme-bootstrap-v1.js', 'appearance bootstrap'],
       ['/brand/kasa-mark.svg', 'Kasa mark'],
       ['/brand/kasa-mark-mint.svg', 'Kasa mint mark'],
       ['/brand/kasa-logo.svg', 'Kasa logo'],
@@ -406,6 +409,7 @@ describe('service worker privacy boundary', () => {
     expect(await previousKasa.get('/offline.html')!.clone().text()).toBe(
       'previous Kasa offline page',
     );
+    expect(await previousKasaV2.get('/offline.html')!.clone().text()).toBe('Kasa v2 offline page');
     expect(claim).not.toHaveBeenCalled();
     await lifecycle('activate');
     expect(stored.has('still-static-v0')).toBe(false);
@@ -413,8 +417,9 @@ describe('service worker privacy boundary', () => {
     expect(stored.has('still-static-v2')).toBe(false);
     expect(stored.has('kasa-static-v0')).toBe(false);
     expect(stored.has('kasa-static-v1')).toBe(false);
-    expect(stored.get('kasa-static-v2')).toBe(currentKasa);
-    expect([...stored.keys()].sort()).toEqual(['kasa-static-v2', 'other-app-static-v1']);
+    expect(stored.has('kasa-static-v2')).toBe(false);
+    expect(stored.get('kasa-static-v3')).toBe(currentKasa);
+    expect([...stored.keys()].sort()).toEqual(['kasa-static-v3', 'other-app-static-v1']);
     expect(stored.get('other-app-static-v1')).toBe(unrelated);
     expect(claim).toHaveBeenCalledOnce();
 
