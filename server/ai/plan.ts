@@ -18,6 +18,7 @@ import { AuthError } from '../auth';
 
 import { PLAN_FIELDS } from './plan-schema';
 import { prepareAccountChain } from './account-chain';
+import { AI_REFERENCE_KINDS as referenceKinds, prepareAiReferences } from './references';
 const kindLabels: Record<AiRecordKind, string> = {
   transaction: 'İşlem',
   account: 'Hesap',
@@ -82,9 +83,13 @@ function parse(value: unknown): AiPlan {
   for (const item of parsed.items) {
     if (keys.has(item.key)) throw new AiError('Plan anahtarları benzersiz olmalıdır.', 400);
     keys.add(item.key);
-    for (const field of Object.keys(item.data))
+    for (const [field, value] of Object.entries(item.data)) {
       if (!Object.hasOwn(PLAN_FIELDS[item.kind], field))
         throw new AiError('Plan izin verilmeyen bir alan içeriyor.', 400);
+      const expectedType = PLAN_FIELDS[item.kind][field] === 'boolean' ? 'boolean' : 'string';
+      if (value != null && typeof value !== expectedType)
+        throw new AiError('Plan alanlarının türü geçersiz. Alanları gözden geçirin.', 400);
+    }
   }
   return parsed as AiPlan;
 }
@@ -102,13 +107,6 @@ function canonical(value: unknown): string {
     );
   return JSON.stringify(value);
 }
-const referenceKinds: Record<string, AiRecordKind> = {
-  accountId: 'account',
-  destinationAccountId: 'account',
-  debtId: 'debt',
-  obligationId: 'obligation',
-  subscriptionId: 'subscription',
-};
 const rollback = Symbol('preview rollback');
 export class AiPlanService {
   constructor(
@@ -204,10 +202,13 @@ export class AiPlanService {
       throw new AiError('Not 1–12000 karakter arasında olmalıdır.', 400);
     if (!this.interpreter.interpretPlan)
       throw new AiError('AI plan yorumlayıcısı kullanılamıyor.', 503);
-    let plan = parse({
-      ...(await this.interpreter.interpretPlan(value.trim(), this.references())),
-      text: value.trim(),
-    });
+    const snapshot = prepareAiReferences(this.references());
+    let plan = snapshot.resolve(
+      parse({
+        ...(await this.interpreter.interpretPlan(value.trim(), snapshot.references)),
+        text: value.trim(),
+      }),
+    );
     plan = prepareAccountChain(this.scheduleDefaults(plan), this.finance.listAccounts());
     if (!plan.certain || plan.issues.length) return { ...plan, certain: false };
     try {
@@ -279,11 +280,13 @@ export class AiPlanService {
                 data: {
                   ...item.data,
                   timestamp: this.finance.normalizeTransactionTimestamp(
-                    item.data.timestamp ?? defaultTimestamp,
+                    item.data.timestamp || defaultTimestamp,
                   ),
                 },
               }
-            : item,
+            : item.kind === 'cycle'
+              ? { ...item, data: { ...item.data, start: item.data.start || defaultTimestamp } }
+              : item,
         )
         .sort((a, b) => {
           if (a.kind !== 'transaction') return b.kind === 'transaction' ? -1 : 0;

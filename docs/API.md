@@ -98,10 +98,10 @@ Her iki metin ucu OpenAI kullanır, eski yerel ayrıştırıcıya dönmez. Not 1
 
 ## Bütün kayıt türleri için AI planı
 
-| Yöntem | Yol | Gövde/sonuç |
-| --- | --- | --- |
-| POST | `/api/ai/entry` | `{ "text": "..." }` → `{ text, certain, issues, items }`, yalnız önizleme |
-| POST | `/api/ai/entry/confirm` | `{ "plan": PLAN, "requestId": "..." }` → kaydedilen kayıt kimlikleri veya tamamlanması gereken plan |
+| Yöntem | Yol                     | Gövde/sonuç                                                                                         |
+| ------ | ----------------------- | --------------------------------------------------------------------------------------------------- |
+| POST   | `/api/ai/entry`         | `{ "text": "..." }` → `{ text, certain, issues, items }`, yalnız önizleme                           |
+| POST   | `/api/ai/entry/confirm` | `{ "plan": PLAN, "requestId": "..." }` → kaydedilen kayıt kimlikleri veya tamamlanması gereken plan |
 
 Not 1–12.000 karakter, plan en fazla 25 kayıt içerir. Her item `{ "key": "benzersiz_anahtar", "kind": "account", "data": { ... } }` biçimindedir. Türler `transaction`, `account`, `debt`, `obligation`, `subscription`, `cycle`; data alanları ilgili yapılandırılmış oluşturma uçlarıyla aynıdır. Bağımsız hesap/borcun açılış bakiyesi (kredi hesabında `currentDebt` de kullanılabilir), abonelik/düzenli ödemenin tutarı, sıklığı ve tarihi zorunludur. Transaction tarihi verilmemişse toplu hareketlerin ortak kayıt zamanı, cycle başlangıcı verilmemişse mevcut zaman kullanılır.
 
@@ -115,7 +115,7 @@ Mevcut kayıtlar gerçek kimlikleriyle, aynı plan içindeki kayıtlar `@key` il
 
 Onay tek atomik işlemde kayıtları, audit ve tekrar koruma makbuzunu yazar. `requestId` 8–128 ASCII harf/rakam/alt çizgi/tiredir. Aynı kimlik ve aynı plan önceki sonucu döndürür; farklı plan 409 alır. Kimlikler eski tek işlem AI makbuzlarından ayrı `plan:` ad alanında tutulur. Provider tamamlandıktan sonra oturum yeniden doğrulanır; oturumu iptal edilmiş kullanıcıya özel plan döndürülmez. Onayda oturum yazma işleminin içinde de doğrulanır.
 
-Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, kimlikleri, tür/para birimi ve yerel tarih/saat dilimi ile açık dönem adı/kimliğini OpenAI'a gönderir. Mevcut bakiyeler/ücretler, tüm defter ve kimlik bilgileri gönderilmez. Planlı kayıt tanımı gerçekleşmiş gider oluşturmaz; gerçekleşmiş ödeme açıkça istenmişse ilgili ID'ye bağlı transaction oluşturulur. Silme/düzenleme veya banka/dosya içe aktarma bu akışta yoktur.
+Yeni plan isteği yalnız metin, hesap/borç/abonelik/düzenli ödeme adları, isteğe özel kısa referans kimlikleri, tür/para birimi ve yerel tarih/saat dilimi ile açık dönem adı/kimliğini OpenAI'a gönderir. Sunucu bu kısa kimlikleri aynı yorumlama isteğine ait referans eşlemesinden gerçek kimliklere çevirir; onay planı gerçek kimlik veya @key içerir. Bilinmeyen ya da belirsiz bağlantı tahmin edilmez. Mevcut bakiyeler/ücretler, tüm defter ve kimlik bilgileri gönderilmez. Planlı kayıt tanımı gerçekleşmiş gider oluşturmaz; gerçekleşmiş ödeme açıkça istenmişse ilgili ID'ye bağlı transaction oluşturulur. Silme/düzenleme veya banka/dosya içe aktarma bu akışta yoktur.
 
 ## OpenAI ayarları
 
