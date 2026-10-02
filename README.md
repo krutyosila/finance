@@ -88,8 +88,8 @@ Eski tek işlem CLI komutları da kullanılabilir:
 
 ```sh
 npm run finance -- add "450 market"
-npm run finance -- add "128000 ödeme geldi"
-npm run finance -- parse "24 USD domain yenilendi" --json
+npm run finance -- add "7200 ödeme geldi"
+npm run finance -- parse "18 USD domain yenilendi" --json
 ```
 
 Bu örnekleri yalnızca gerçek işlemlerinizi ifade ediyorsa çalıştırın. Eski `add` komutunda metni OpenAI yorumlar; tek açık işlem sunucudaki muhasebe kontrollerinden geçip doğrudan kaydedilir. Belirsiz veya birden fazla ayrı işlemde CLI `{ "saved": false, "confirmation": ... }` döndürür, **2** çıkış koduyla biter ve hiçbir şey kaydetmez. Doğru alanları seçerek yapılandırılmış işlem gönderin veya yeni `ai preview` akışını kullanın. Borç hareketi eşleşen mevcut veya aynı toplu planda tanımlanan borç gerektirir. Anahtar yoksa, bağlantı/biçim/kota hatasında kayıt yapılmaz; eski ayrıştırıcıya dönülmez.
